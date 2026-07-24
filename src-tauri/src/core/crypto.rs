@@ -226,7 +226,19 @@ mod tests {
     /// next time it is loaded, not left as-is forever.
     #[test]
     fn loading_an_existing_key_re_restricts_it() {
+        // The Windows half needs a fixture that *starts* with inherited ACEs,
+        // so it must sit under the user profile. Do not fall back to the
+        // default temp directory: on a self-hosted box TEMP happens to resolve
+        // under the profile and inherits, but on a hosted runner it is a
+        // separate volume that does not — which is a property of the runner,
+        // not of the code under test.
+        #[cfg(windows)]
+        let tmp = tempfile::Builder::new()
+            .tempdir_in(std::env::var("USERPROFILE").expect("USERPROFILE is set on Windows"))
+            .unwrap();
+        #[cfg(not(windows))]
         let tmp = tempfile::tempdir().unwrap();
+
         let path = tmp.path().join(".secret.key");
         std::fs::write(&path, [7u8; 32]).unwrap();
 
