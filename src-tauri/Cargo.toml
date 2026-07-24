@@ -42,7 +42,7 @@ chrono = "0.4"
 gethostname = "1"
 serde_yaml = "0.9"
 toml = "0.8"
-git2 = { version = "0.19", features = ["vendored-openssl"] }
+git2 = { version = "0.20", features = ["vendored-openssl"] }
 tokio = { version = "1", features = ["full"] }
 regex = "1"
 hex = "0.4"
