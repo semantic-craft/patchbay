@@ -435,7 +435,7 @@ impl<'a> FleetService<'a> {
             Some(url) if !url.trim().is_empty() => Ok(url.trim().to_string()),
             _ => Err(AppError::invalid_input(
                 "fleet_meta_url is not configured; set it to the fleet meta repo URL \
-                 (e.g. metis:git-mirrors/projects/_patchbay-fleet.git, or a local \
+                 (e.g. alpha:git-mirrors/projects/_patchbay-fleet.git, or a local \
                  path on the hub host)",
             )),
         }
@@ -2346,7 +2346,7 @@ impl<'a> FleetService<'a> {
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
-    // Both separators: `projects_root` is a per-machine setting, and on Legion
+    // Both separators: `projects_root` is a per-machine setting, and on Beta
     // it is typed as `~\Projects`. Matches `central_repo::normalize_path`.
     if path.starts_with("~/") || path.starts_with("~\\") {
         return dirs::home_dir().unwrap_or_default().join(&path[2..]);
@@ -4160,10 +4160,7 @@ branch = "main"
                 "git@example.invalid:team/alpha.git",
             ],
         );
-        git(
-            &alpha,
-            &["remote", "add", "test", "helios:/stale/alpha.git"],
-        );
+        git(&alpha, &["remote", "add", "test", "gamma:/stale/alpha.git"]);
         let origin_before = git_stdout(&alpha, &["config", "--get-regexp", "^remote\\.origin\\."]);
         seed_meta_cache(&fx);
 
@@ -4180,13 +4177,13 @@ branch = "main"
         assert!(evidence.remote_exists);
         assert_eq!(
             evidence.current_remote_url.as_deref(),
-            Some("helios:/stale/alpha.git")
+            Some("gamma:/stale/alpha.git")
         );
         assert_eq!(evidence.target_remote_url, mirror.to_string_lossy());
         assert!(!mirror.exists(), "preview must not create the mirror");
         assert_eq!(
             git_stdout(&alpha, &["remote", "get-url", "test"]),
-            "helios:/stale/alpha.git",
+            "gamma:/stale/alpha.git",
             "preview must not rewrite the remote"
         );
         assert_eq!(
@@ -4223,7 +4220,7 @@ branch = "main"
         let detail = audit[0].detail.as_deref().unwrap();
         assert!(detail.contains("before_head="));
         assert!(detail.contains("after_head="));
-        assert!(detail.contains("before_remote=helios:/stale/alpha.git"));
+        assert!(detail.contains("before_remote=gamma:/stale/alpha.git"));
         assert!(detail.contains(&format!("after_remote={}", mirror.display())));
     }
 
@@ -4379,10 +4376,7 @@ branch = "main"
         seed_meta_cache(&fx);
         let alpha = fx.projects.join("alpha");
         let mirror = fx.projects.parent().unwrap().join("mirrors/alpha.git");
-        git(
-            &alpha,
-            &["remote", "add", "test", "helios:/stale/alpha.git"],
-        );
+        git(&alpha, &["remote", "add", "test", "gamma:/stale/alpha.git"]);
         std::fs::remove_dir_all(&mirror).unwrap();
         let service = FleetService::new(&fx.store);
 
@@ -4588,11 +4582,8 @@ branch = "main"
 
     #[test]
     fn sanitize_machine_id_produces_stable_slugs() {
-        assert_eq!(sanitize_machine_id("Metis"), "metis");
-        assert_eq!(
-            sanitize_machine_id("Xianwei's iMac (2)"),
-            "xianwei-s-imac-2"
-        );
+        assert_eq!(sanitize_machine_id("Alpha"), "alpha");
+        assert_eq!(sanitize_machine_id("Example Host (2)"), "example-host-2");
         assert_eq!(sanitize_machine_id("---"), "machine");
     }
 }

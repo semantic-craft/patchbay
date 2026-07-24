@@ -19,10 +19,10 @@
 
 ### 开发者与治理
 - 新增 `core/fleet/`(清单、元数据仓、仓库操作、服务、自动 round)与 `patchbay-cli fleet status|discover|report|push|pull|bootstrap|init`。设计正本:`docs/xw-fleet-sync-design.md`。
-- 仓库清单迁至 hub 侧元数据仓的 `manifest.toml`,终结了 `metis-projects.conf` 两份副本互相覆盖的整类隐患。`sync-metis-projects.sh` 由 747 行缩为 316 行薄壳,全部委派 CLI,缺 CLI 时 exit 127 并给出指引。
+- 仓库清单迁至 hub 侧元数据仓的 `manifest.toml`,终结了 the legacy per-machine config 两份副本互相覆盖的整类隐患。the sync script 由 747 行缩为 316 行薄壳,全部委派 CLI,缺 CLI 时 exit 127 并给出指引。
 - 每个写动词都记录计划证据,并在 `fleet.lock` 内重新校验后才动手,任何漂移都转为逐项冲突。fleet 的任何动词都不能 merge、rebase、force、reset、stash、自动提交或删除。
 - 安全:清单中的 hub URL 曾未经 `--` 分隔就传给 `git ls-remote`,导致以 `-` 开头的值被当作选项解析,`--upload-pack=<命令>` 会被执行——且发生在只读的状态路径上(#54)。已修复,并对 `hub.url` 增加传输协议白名单校验。
-- epic 上记录的已接受偏差:权威机允许 bootstrap 自己的仓(它只写不存在的路径,保护事实源的规则在此没有保护对象)(#56);产品范围收敛为 macOS-only 后放弃 Windows/Legion 支持(#47)。
+- epic 上记录的已接受偏差:权威机允许 bootstrap 自己的仓(它只写不存在的路径,保护事实源的规则在此没有保护对象)(#56);产品范围收敛为 macOS-only 后放弃 Windows 支持(#47)。
 
 ## [1.30.0] - 2026-07-18
 

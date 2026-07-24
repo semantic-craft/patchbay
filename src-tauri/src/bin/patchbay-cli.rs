@@ -1040,7 +1040,7 @@ fn looks_like_local_path(reference: &str) -> bool {
 }
 
 /// `C:\...` or `C:/...`. Deliberately requires the separator: without it `x:y`
-/// would swallow scp-style git remotes like `metis:git-mirrors/repo.git`, whose
+/// would swallow scp-style git remotes like `alpha:git-mirrors/repo.git`, whose
 /// host happened to be one character long.
 fn starts_with_drive_letter(reference: &str) -> bool {
     let bytes = reference.as_bytes();
@@ -3164,7 +3164,7 @@ mod fleet_cli_tests {
             "fleet",
             "config",
             "--meta-url",
-            "metis:git-mirrors/projects/_patchbay-fleet.git",
+            "alpha:git-mirrors/projects/_patchbay-fleet.git",
         ])
         .unwrap()
         .command
@@ -3173,7 +3173,7 @@ mod fleet_cli_tests {
                 command: FleetCommand::Config { meta_url },
             }) => assert_eq!(
                 meta_url.as_deref(),
-                Some("metis:git-mirrors/projects/_patchbay-fleet.git")
+                Some("alpha:git-mirrors/projects/_patchbay-fleet.git")
             ),
             other => panic!("expected fleet config --meta-url, got {other:?}"),
         }

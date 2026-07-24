@@ -41,16 +41,16 @@ const AUTO_STATUS: FleetAutoRoundStatus = {
 };
 
 const STATUS: FleetStatus = {
-  machine: "metis",
+  machine: "alpha",
   meta_url: "/hub/_patchbay-fleet.git",
   meta_state: "fresh",
   meta_warning: null,
   projects_root: "/Users/me/Projects",
   scanned_at: Date.now(),
   machines: [
-    { id: "metis", display_name: "Metis", is_self: true, reported_at: null },
+    { id: "alpha", display_name: "Alpha", is_self: true, reported_at: null },
     {
-      id: "helios",
+      id: "gamma",
       display_name: "Demo Mac",
       is_self: false,
       reported_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
@@ -59,14 +59,14 @@ const STATUS: FleetStatus = {
   repos: [
     {
       name: "patchbay",
-      hub: "metis",
-      authority: "metis",
+      hub: "alpha",
+      authority: "alpha",
       branch: "main",
       auto_sync: false,
       hub_head: "4553c0b",
       hub_note: null,
       cells: {
-        metis: {
+        alpha: {
           name: "patchbay",
           present: true,
           branch: "main",
@@ -76,7 +76,7 @@ const STATUS: FleetStatus = {
           ahead: 1,
           behind: 0,
         },
-        helios: {
+        gamma: {
           name: "patchbay",
           present: true,
           branch: "main",
@@ -90,14 +90,14 @@ const STATUS: FleetStatus = {
     },
     {
       name: "prompt-optimizer",
-      hub: "metis",
-      authority: "helios",
+      hub: "alpha",
+      authority: "gamma",
       branch: "main",
       auto_sync: false,
       hub_head: null,
       hub_note: "hub_unreachable",
       cells: {
-        metis: {
+        alpha: {
           name: "prompt-optimizer",
           present: false,
           branch: null,
@@ -115,7 +115,7 @@ const STATUS: FleetStatus = {
 
 const PUSH_PLAN: FleetPushPlan = {
   ok: true,
-  machine: "metis",
+  machine: "alpha",
   planned_at: Date.now(),
   items: [
     {
@@ -135,7 +135,7 @@ const PUSH_PLAN: FleetPushPlan = {
 
 const PUSH_OUTCOME: FleetPushOutcome = {
   ok: true,
-  machine: "metis",
+  machine: "alpha",
   items: [
     {
       repo: "patchbay",
@@ -150,12 +150,12 @@ const PUSH_OUTCOME: FleetPushOutcome = {
 
 const PULL_STATUS: FleetStatus = {
   ...STATUS,
-  repos: [{ ...STATUS.repos[0], authority: "helios" }],
+  repos: [{ ...STATUS.repos[0], authority: "gamma" }],
 };
 
 const PULL_PLAN: FleetPullPlan = {
   ok: true,
-  machine: "metis",
+  machine: "alpha",
   manifest_digest: "manifest-v1",
   planned_at: Date.now(),
   items: [
@@ -169,8 +169,8 @@ const PULL_PLAN: FleetPullPlan = {
         target_oid: "da6c7a1000000000000000000000000000000000",
         dirty_count: 0,
         branch: "main",
-        remote_url: "metis:git-mirrors/projects/patchbay.git",
-        hub_url: "metis:git-mirrors/projects/patchbay.git",
+        remote_url: "alpha:git-mirrors/projects/patchbay.git",
+        hub_url: "alpha:git-mirrors/projects/patchbay.git",
       },
     },
   ],
@@ -178,7 +178,7 @@ const PULL_PLAN: FleetPullPlan = {
 
 const PULL_OUTCOME: FleetPullOutcome = {
   ok: true,
-  machine: "metis",
+  machine: "alpha",
   items: [
     {
       repo: "patchbay",
@@ -192,32 +192,32 @@ const PULL_OUTCOME: FleetPullOutcome = {
 };
 
 const MANIFEST_SNAPSHOT: FleetManifestSnapshot = {
-  machine: "metis",
+  machine: "alpha",
   meta_head: "meta-head-v1",
   manifest_digest: "manifest-v1",
-  known_machines: ["helios", "metis"],
+  known_machines: ["gamma", "alpha"],
   manifest: {
     fleet: { projects_root: "~/Projects" },
     hubs: {
-      metis: { url: "metis:mirrors", host_machine: "metis" },
-      backup: { url: "backup:mirrors", host_machine: "helios" },
+      alpha: { url: "alpha:mirrors", host_machine: "alpha" },
+      backup: { url: "backup:mirrors", host_machine: "gamma" },
     },
     repos: [
-      { name: "patchbay", hub: "metis", authority: "metis", branch: "main" },
+      { name: "patchbay", hub: "alpha", authority: "alpha", branch: "main" },
     ],
   },
 };
 
 const MANIFEST_PLAN: FleetManifestUpdatePlan = {
-  machine: "metis",
+  machine: "alpha",
   meta_head: "meta-head-v1",
   manifest_digest: "manifest-v1",
   planned_at: Date.now(),
   manifest: {
     ...MANIFEST_SNAPSHOT.manifest,
     repos: [
-      { name: "patchbay", hub: "backup", authority: "helios", branch: "stable" },
-      { name: "stray", hub: "metis", authority: "metis", branch: "main" },
+      { name: "patchbay", hub: "backup", authority: "gamma", branch: "stable" },
+      { name: "stray", hub: "alpha", authority: "alpha", branch: "main" },
     ],
   },
   changes: [
@@ -225,20 +225,20 @@ const MANIFEST_PLAN: FleetManifestUpdatePlan = {
       action: "update",
       repo: "patchbay",
       before: MANIFEST_SNAPSHOT.manifest.repos[0],
-      after: { name: "patchbay", hub: "backup", authority: "helios", branch: "stable" },
+      after: { name: "patchbay", hub: "backup", authority: "gamma", branch: "stable" },
     },
     {
       action: "add",
       repo: "stray",
       before: null,
-      after: { name: "stray", hub: "metis", authority: "metis", branch: "main" },
+      after: { name: "stray", hub: "alpha", authority: "alpha", branch: "main" },
     },
   ],
 };
 
 const BOOTSTRAP_PLAN: FleetBootstrapPlan = {
   ok: true,
-  machine: "metis",
+  machine: "alpha",
   manifest_digest: "manifest-v1",
   planned_at: Date.now(),
   items: [
@@ -249,8 +249,8 @@ const BOOTSTRAP_PLAN: FleetBootstrapPlan = {
       message: null,
       evidence: {
         target_path: "/Users/me/Projects/prompt-optimizer",
-        hub_name: "metis",
-        hub_url: "metis:git-mirrors/projects/prompt-optimizer.git",
+        hub_name: "alpha",
+        hub_url: "alpha:git-mirrors/projects/prompt-optimizer.git",
         branch: "main",
         target_oid: "385f5f0000000000000000000000000000000000",
       },
@@ -260,7 +260,7 @@ const BOOTSTRAP_PLAN: FleetBootstrapPlan = {
 
 const BOOTSTRAP_OUTCOME: FleetBootstrapOutcome = {
   ok: true,
-  machine: "metis",
+  machine: "alpha",
   items: [
     {
       repo: "prompt-optimizer",
@@ -308,7 +308,7 @@ beforeEach(() => {
         return Promise.resolve(MANIFEST_SNAPSHOT);
       case "fleet_discover":
         return Promise.resolve({
-          machine: "metis",
+          machine: "alpha",
           projects_root: "/Users/me/Projects",
           scanned_at: Date.now(),
           unlisted: [{ name: "stray", path: "/Users/me/Projects/stray", origin: null }],
@@ -352,7 +352,7 @@ beforeEach(() => {
         return Promise.resolve(MANIFEST_SNAPSHOT);
       case "fleet_discover":
         return Promise.resolve({
-          machine: "metis",
+          machine: "alpha",
           projects_root: "/Users/me/Projects",
           scanned_at: Date.now(),
           unlisted: [{ name: "stray", path: "/Users/me/Projects/stray", origin: null }],
@@ -386,7 +386,7 @@ describe("Fleet", () => {
     expect(await screen.findByText("patchbay")).toBeDefined();
     expect(screen.getByText("prompt-optimizer")).toBeDefined();
     // Machine columns show display names; self column is marked.
-    expect(screen.getByText("Metis")).toBeDefined();
+    expect(screen.getByText("Alpha")).toBeDefined();
     expect(screen.getByText("Demo Mac")).toBeDefined();
     expect(screen.getByText("(this machine)")).toBeDefined();
     // Reported column shows its age.
@@ -401,7 +401,7 @@ describe("Fleet", () => {
     // prompt-optimizer is absent locally and its hub is unreachable.
     expect(screen.getByText("missing")).toBeDefined();
     expect(screen.getByText(/hub unreachable/)).toBeDefined();
-    // helios never reported prompt-optimizer → unknown-not-absent wording.
+    // gamma never reported prompt-optimizer → unknown-not-absent wording.
     expect(screen.getByText("not reported")).toBeDefined();
   });
 
@@ -591,7 +591,7 @@ describe("Fleet", () => {
         case "fleet_apply_push":
           return Promise.resolve({
             ok: false,
-            machine: "metis",
+            machine: "alpha",
             items: [
               {
                 repo: "patchbay",
@@ -641,7 +641,7 @@ describe("Fleet", () => {
     expect(mockInvoke).not.toHaveBeenCalledWith("fleet_apply_pull", expect.anything());
     expect(await screen.findByText("Pull repository")).toBeDefined();
     expect(screen.getByText("main@613873f → da6c7a1")).toBeDefined();
-    expect(screen.getByText("metis:git-mirrors/projects/patchbay.git")).toBeDefined();
+    expect(screen.getByText("alpha:git-mirrors/projects/patchbay.git")).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Pull" }));
 
@@ -694,7 +694,7 @@ describe("Fleet", () => {
         case "fleet_apply_pull":
           return Promise.resolve({
             ok: false,
-            machine: "metis",
+            machine: "alpha",
             items: [
               {
                 repo: "patchbay",
@@ -730,7 +730,7 @@ describe("Fleet", () => {
     expect(await screen.findByText("Manage fleet manifest")).toBeDefined();
     fireEvent.change(screen.getByLabelText("Hub patchbay"), { target: { value: "backup" } });
     fireEvent.change(screen.getByLabelText("Authority patchbay"), {
-      target: { value: "helios" },
+      target: { value: "gamma" },
     });
     fireEvent.change(screen.getByLabelText("Branch patchbay"), {
       target: { value: "stable" },
@@ -745,8 +745,8 @@ describe("Fleet", () => {
         repos: MANIFEST_PLAN.manifest.repos,
       },
     });
-    expect(await screen.findByText("Update patchbay: metis / metis / main → backup / helios / stable")).toBeDefined();
-    expect(screen.getByText("Add stray: metis / metis / main")).toBeDefined();
+    expect(await screen.findByText("Update patchbay: alpha / alpha / main → backup / gamma / stable")).toBeDefined();
+    expect(screen.getByText("Add stray: alpha / alpha / main")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
@@ -863,7 +863,7 @@ describe("Fleet", () => {
         case "fleet_apply_bootstrap":
           return Promise.resolve({
             ok: false,
-            machine: "metis",
+            machine: "alpha",
             items: [
               {
                 repo: "prompt-optimizer",
@@ -922,7 +922,7 @@ describe("Fleet", () => {
       return Promise.resolve(undefined);
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
-    expect(await screen.findByText("Remove patchbay: metis / metis / main")).toBeDefined();
+    expect(await screen.findByText("Remove patchbay: alpha / alpha / main")).toBeDefined();
     fireEvent.click(screen.getAllByRole("button", { name: "Cancel" })[1]);
 
     expect(

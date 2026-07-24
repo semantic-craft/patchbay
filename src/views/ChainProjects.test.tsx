@@ -1518,8 +1518,8 @@ describe("ChainProjects", () => {
 
   /** A freshly enrolled project: no aggregate, no surfaces, zero links. */
   const EMPTY_PROJECT: ChainProject = {
-    name: "helios",
-    path: "/helios",
+    name: "gamma",
+    path: "/gamma",
     agents_dir: null,
     surfaces: [],
   };
@@ -1544,8 +1544,8 @@ describe("ChainProjects", () => {
   };
 
   const ONBOARD_PLAN: ChainLinkPlan = {
-    project: "/helios",
-    agg_dir: "/helios/.agents/skills",
+    project: "/gamma",
+    agg_dir: "/gamma/.agents/skills",
     originals: ["/wh/mp/skills/grilling", "/wh/xw/skills/zotero"],
     agents: ["claude", "codex", "copilot"],
     skills: [],
@@ -1554,7 +1554,7 @@ describe("ChainProjects", () => {
   };
 
   const ONBOARD_OUTCOME: ChainApplyOutcome = {
-    report: { agg_dir: "/helios/.agents/skills", skills: [], entries: [] },
+    report: { agg_dir: "/gamma/.agents/skills", skills: [], entries: [] },
     verified: true,
     observed: ["grilling", "zotero"],
     missing: [],
@@ -1646,7 +1646,7 @@ describe("ChainProjects", () => {
     fireEvent.click(within(wizard).getByTestId("wizard-apply"));
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith("chain_plan_link", {
-        projectPath: "/helios",
+        projectPath: "/gamma",
         skillPaths: ["/wh/mp/skills/grilling", "/wh/xw/skills/zotero"],
         agents: ["claude", "codex", "copilot"],
       }),

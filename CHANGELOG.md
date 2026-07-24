@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Release Overview
-- Patchbay is multi-platform again. The 1.31.0 note below records that Windows/Legion support "was dropped when the product scope narrowed to macOS-only (#47)" — that is no longer true, and #58 reverses it. The entry is left standing because it was the decision at the time; this section is the reversal.
+- Patchbay is multi-platform again. The 1.31.0 note below records that Windows support "was dropped when the product scope narrowed to macOS-only (#47)" — that is no longer true, and #58 reverses it. The entry is left standing because it was the decision at the time; this section is the reversal.
 
 ### User-facing
 - **Windows builds ship** — `release.yml` gained a `build-windows` job producing an NSIS installer. It is **unsigned**, so Windows shows a SmartScreen warning on first run; auto-update still works, because the updater verifies minisign rather than Authenticode.
@@ -21,9 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `npm test` — including `release-contract.test.ts`, a release gate — now runs on pull requests instead of only inside `release.yml`, where it first executed after the tag was already pushed.
 
 ### Known gaps
-- Publishing a release now requires the legion runner to be online: `verify-updater-assets` demands a `windows-x86_64` entry in `latest.json`.
+- Publishing a release now requires the Windows runner to be online: `verify-updater-assets` demands a `windows-x86_64` entry in `latest.json`.
 - The Windows installer is unsigned by choice. Signing means adding `bundle.windows.certificateThumbprint` and importing a certificate on the runner; a half-wired signing path that silently no-ops would be worse than its visible absence.
-- The `prompt-optimizer` round-trip in #47's P3 gate is only half-proven: legion fast-forwarded from the hub, but the commit-and-push leg belongs to metis (the authority machine) and cannot be driven from legion.
+- The `prompt-optimizer` round-trip in #47's P3 gate is only half-proven: a non-authority machine fast-forwarded from the hub, but the commit-and-push leg belongs to the authority machine and cannot be driven from a non-authority machine.
 
 ## [1.31.0] - 2026-07-18
 
@@ -39,10 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Developer & Governance
 - New `core/fleet/` (manifest, meta repo, repo ops, service, auto round) plus `patchbay-cli fleet status|discover|report|push|pull|bootstrap|init`. Design of record: `docs/xw-fleet-sync-design.md`.
-- The repo list moved to `manifest.toml` in a hub-side meta repo, ending the two-copies-overwrite-each-other failure mode of `metis-projects.conf`. `sync-metis-projects.sh` shrank from 747 lines to a 316-line shell that delegates to the CLI and exits 127 with guidance when it is absent.
+- The repo list moved to `manifest.toml` in a hub-side meta repo, ending the two-copies-overwrite-each-other failure mode of the legacy per-machine config. the sync script shrank from 747 lines to a 316-line shell that delegates to the CLI and exits 127 with guidance when it is absent.
 - Every mutating verb records plan evidence and re-verifies it under `fleet.lock` before acting; any drift becomes a per-item conflict. No fleet verb can merge, rebase, force, reset, stash, auto-commit, or delete.
 - Security: a manifest hub URL reached `git ls-remote` without a `--` separator, so a value beginning with `-` was parsed as an option and `--upload-pack=<cmd>` executed — on the read-only status path (#54). Fixed, and `hub.url` is now validated against a transport allowlist.
-- Accepted deviations recorded on the epic: bootstrap is permitted on the authority machine (it only ever writes a path that does not exist, so the rule protecting the source of truth has nothing to protect) (#56); Windows/Legion support was dropped when the product scope narrowed to macOS-only (#47).
+- Accepted deviations recorded on the epic: bootstrap is permitted on the authority machine (it only ever writes a path that does not exist, so the rule protecting the source of truth has nothing to protect) (#56); Windows support was dropped when the product scope narrowed to macOS-only (#47).
 
 ## [1.30.0] - 2026-07-18
 

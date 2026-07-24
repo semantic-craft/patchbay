@@ -164,7 +164,7 @@ pub fn push_refs(repo_dir: &Path, refspecs: &[String], url: &str) -> Result<()> 
 
 /// Push refspecs to an explicit URL rather than a configured local remote.
 /// Fleet uses this because the manifest hub is authoritative and a checkout's
-/// existing `origin`/`metis` remote may intentionally differ.
+/// existing `origin`/`alpha` remote may intentionally differ.
 pub fn push_refs_to_url(repo_dir: &Path, refspecs: &[String], url: &str) -> Result<()> {
     let repo = git2::Repository::open(repo_dir).context("Failed to open repository")?;
     let mut remote = repo
@@ -638,13 +638,13 @@ mod tests {
             .success());
 
         let dest = tmp.path().join("bootstrapped");
-        clone_branch_with_remote(&file_url(&hub), &dest, "metis", "main").unwrap();
+        clone_branch_with_remote(&file_url(&hub), &dest, "alpha", "main").unwrap();
 
         let repo = git2::Repository::open(&dest).unwrap();
         assert_eq!(repo.head().unwrap().shorthand(), Some("main"));
         assert_eq!(
             repo.remotes().unwrap().iter().flatten().collect::<Vec<_>>(),
-            vec!["metis"],
+            vec!["alpha"],
             "the manifest hub must be the sole remote; origin stays free"
         );
         // Tags are deliberately not asserted: this test can only drive a
@@ -659,7 +659,7 @@ mod tests {
             .collect();
         assert_eq!(
             tracked,
-            vec!["refs/remotes/metis/main".to_string()],
+            vec!["refs/remotes/alpha/main".to_string()],
             "single-branch: `side` must not be tracked"
         );
     }
