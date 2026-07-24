@@ -2939,6 +2939,14 @@ branch = "main"
 
         let store = SkillStore::new(&temp.path().join("patchbay.db")).unwrap();
         store.set_setting(MACHINE_ID_KEY, "selfie").unwrap();
+        // Pin the display name too. Without it `display_name()` falls back to
+        // `default_device_name()`, i.e. the real hostname of whichever machine
+        // runs the suite, and the tests that commit a selfie report write that
+        // name into a git object. That makes the fixture depend on the runner
+        // and puts a real host name in the committed data.
+        store
+            .set_setting("backup_device_name", "Selfie Machine")
+            .unwrap();
         store
             .set_setting(META_URL_KEY, meta_bare.to_str().unwrap())
             .unwrap();
