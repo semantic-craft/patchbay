@@ -101,6 +101,8 @@ jobs:
             CHANGELOG-zh.md \
             package.json \
             package-lock.json \
+            src-tauri/Cargo.toml \
+            src-tauri/Cargo.lock \
             src-tauri/tauri.conf.json \
             src/i18n/en.json \
             src/i18n/zh.json \

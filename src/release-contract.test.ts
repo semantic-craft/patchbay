@@ -261,6 +261,11 @@ describe("Patchbay release contract", () => {
       "CHANGELOG-zh.md",
       "package.json",
       "package-lock.json",
+      // prepare-release.mjs bumps the Cargo manifest and lockfile too —
+      // Windows embeds that version into the exe and `patchbay-cli --version`.
+      // Leaving them out of the release commit ships a stale version string.
+      "src-tauri/Cargo.toml",
+      "src-tauri/Cargo.lock",
       "src-tauri/tauri.conf.json",
       "src/i18n/en.json",
       "src/i18n/zh.json",
