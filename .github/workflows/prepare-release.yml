@@ -1,0 +1,111 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  # No native build here — this job only bumps the version, tags, and dispatches
+  # release.yml — so it runs on the cheapest hosted runner.
+  prepare-release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify main branch dispatch
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::Prepare Release must run from main, not ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release secrets before tagging
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PATCHBAY_RELEASE_APP_CLIENT_ID: ${{ vars.PATCHBAY_RELEASE_APP_CLIENT_ID }}
+          PATCHBAY_RELEASE_APP_PRIVATE_KEY: ${{ secrets.PATCHBAY_RELEASE_APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in \
+            TAURI_SIGNING_PRIVATE_KEY \
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            KEYCHAIN_PASSWORD \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID \
+            PATCHBAY_RELEASE_APP_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              missing=1
+            fi
+          done
+          if [ -z "$PATCHBAY_RELEASE_APP_CLIENT_ID" ]; then
+            echo "::error::Missing required repository variable: PATCHBAY_RELEASE_APP_CLIENT_ID"
+            missing=1
+          fi
+          exit "$missing"
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare release files
+        run: npm run release:prepare -- ${{ inputs.release_type }}
+
+      - name: Commit, tag, and dispatch release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git add \
+            CHANGELOG.md \
+            CHANGELOG-zh.md \
+            package.json \
+            package-lock.json \
+            src-tauri/tauri.conf.json \
+            src/i18n/en.json \
+            src/i18n/zh.json \
+            src/i18n/zh-TW.json
+          git commit -m "chore: bump version to ${VERSION}"
+          git tag -a "v${VERSION}" -m "v${VERSION}"
+          git push --atomic origin HEAD:main "v${VERSION}"
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "v${VERSION}"

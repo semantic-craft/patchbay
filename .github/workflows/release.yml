@@ -1,0 +1,480 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_REPOSITORY: semantic-craft/patchbay-releases
+
+jobs:
+  release-secrets:
+    runs-on: ubuntu-latest
+    name: Validate required release secrets
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}
+      PATCHBAY_RELEASE_APP_CLIENT_ID: ${{ vars.PATCHBAY_RELEASE_APP_CLIENT_ID }}
+      PATCHBAY_RELEASE_APP_PRIVATE_KEY: ${{ secrets.PATCHBAY_RELEASE_APP_PRIVATE_KEY }}
+    steps:
+      - name: Check secret presence without printing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in \
+            TAURI_SIGNING_PRIVATE_KEY \
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            KEYCHAIN_PASSWORD \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID \
+            PATCHBAY_RELEASE_APP_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              missing=1
+            fi
+          done
+          if [ -z "$PATCHBAY_GITHUB_APP_CLIENT_ID" ]; then
+            echo "::error::Missing required repository variable: PATCHBAY_GITHUB_APP_CLIENT_ID"
+            missing=1
+          fi
+          if [ -z "$PATCHBAY_RELEASE_APP_CLIENT_ID" ]; then
+            echo "::error::Missing required repository variable: PATCHBAY_RELEASE_APP_CLIENT_ID"
+            missing=1
+          fi
+          exit "$missing"
+
+  verify:
+    runs-on: ubuntu-latest
+    name: Verify release candidate
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v${VERSION}" ]; then
+            echo "::error::Tag/version mismatch: ${GITHUB_REF_NAME} != v${VERSION}"
+            exit 1
+          fi
+          TAG_COMMIT=$(git rev-list -n 1 "$GITHUB_REF_NAME")
+          MAIN_COMMIT=$(git rev-parse origin/main)
+          if [ "$TAG_COMMIT" != "$MAIN_COMMIT" ]; then
+            echo "::error::Tag commit is not origin/main HEAD: ${TAG_COMMIT} != ${MAIN_COMMIT}"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run release gates
+        run: |
+          npm test
+          npm run lint
+          npm run build
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+  build:
+    needs: [release-secrets, verify]
+    strategy:
+      fail-fast: false
+      # Both legs upload into one draft release, and only the first to arrive
+      # creates it — so they must not race.
+      max-parallel: 1
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            label: macOS-arm64
+          - target: x86_64-apple-darwin
+            label: macOS-x64
+
+    # macos-14 is Apple Silicon; it builds the arm64 target natively and
+    # cross-compiles the x86_64 target. GitHub-hosted, free for public repos.
+    runs-on: macos-14
+    name: Build (${{ matrix.label }})
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Create release publisher token
+        id: release-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.PATCHBAY_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PATCHBAY_RELEASE_APP_PRIVATE_KEY }}
+          owner: semantic-craft
+          repositories: patchbay-releases
+          permission-contents: write
+
+      - name: Extract changelog for current version
+        id: changelog
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          BODY_EN=$(sed -n "/^## \[${VERSION}\]/,/^## \[/{ /^## \[${VERSION}\]/d; /^## \[/d; p; }" CHANGELOG.md | awk -f scripts/strip-empty-sections.awk)
+          BODY_ZH=$(sed -n "/^## \[${VERSION}\]/,/^## \[/{ /^## \[${VERSION}\]/d; /^## \[/d; p; }" CHANGELOG-zh.md | awk -f scripts/strip-empty-sections.awk)
+          # Release date: prefer the date on the CHANGELOG heading; fall back to today.
+          RELEASE_DATE=$(grep -m1 "^## \[${VERSION}\] - " CHANGELOG.md | sed -E "s/^## \[${VERSION}\] - ([0-9-]+).*/\1/")
+          if [ -z "$RELEASE_DATE" ]; then RELEASE_DATE=$(date -u +%Y-%m-%d); fi
+          {
+            echo "body<<EOF"
+            echo "## Patchbay ${{ github.ref_name }}"
+            echo ""
+            echo "发布日期：\`${RELEASE_DATE}\`"
+            echo ""
+            echo "$BODY_ZH"
+            echo ""
+            echo "### 当前校验状态"
+            echo ""
+            echo "- ✅ macOS 构建通过（Intel / Apple Silicon）"
+            echo "- ✅ TypeScript typecheck 通过"
+            echo ""
+            echo "---"
+            echo ""
+            echo "<details><summary>English release notes</summary>"
+            echo ""
+            echo "Release date: \`${RELEASE_DATE}\`"
+            echo ""
+            echo "$BODY_EN"
+            echo ""
+            echo "### Current Verification"
+            echo ""
+            echo "- ✅ macOS build passed (Intel / Apple Silicon)"
+            echo "- ✅ TypeScript typecheck passed"
+            echo ""
+            echo "</details>"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # Standard hosted-runner signing: build a throwaway keychain in RUNNER_TEMP,
+      # import the Developer ID cert, and let codesign use it. The runner is
+      # ephemeral, so there is no human login keychain to protect or restore.
+      - name: Import Apple Developer certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/patchbay-signing.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -t 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$(security list-keychains -d user | sed s/\"//g)"
+          CERT_INFO=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1)
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          test -n "$CERT_ID"
+          echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
+          rm -f "$CERTIFICATE_PATH"
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          CI: "true"
+          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}
+        with:
+          owner: semantic-craft
+          repo: patchbay-releases
+          tagName: v__VERSION__
+          releaseCommitish: main
+          releaseName: "Patchbay v__VERSION__"
+          releaseBody: ${{ steps.changelog.outputs.body }}
+          releaseDraft: true
+          prerelease: false
+          updaterJsonKeepUniversal: true
+          retryAttempts: 2
+          args: --target ${{ matrix.target }}
+
+      - name: Verify signed and notarized macOS bundles
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          APP_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Patchbay.app"
+          DMG_PATH=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'Patchbay_*.dmg' -print -quit)
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Expected app bundle not found at $APP_PATH" >&2
+            exit 1
+          fi
+          if [ -z "$DMG_PATH" ]; then
+            echo "Expected Patchbay DMG not found" >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign --verify --verbose=2 "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$APP_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
+          LOCAL_DMG_SHA=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+          gh release upload "$GITHUB_REF_NAME" "$DMG_PATH" \
+            --repo "$RELEASE_REPOSITORY" \
+            --clobber
+          DMG_NAME=$(basename "$DMG_PATH")
+          rm -f "/tmp/$DMG_NAME"
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$RELEASE_REPOSITORY" \
+            --pattern "$DMG_NAME" \
+            --dir /tmp \
+            --clobber
+          UPLOADED_DMG_SHA=$(shasum -a 256 "/tmp/$DMG_NAME" | awk '{print $1}')
+          if [ "$LOCAL_DMG_SHA" != "$UPLOADED_DMG_SHA" ]; then
+            echo "::error::Uploaded DMG checksum mismatch"
+            exit 1
+          fi
+
+  # Windows is a separate job rather than a matrix row, because the macOS build
+  # body is macOS all the way down — the keychain dance,
+  # codesign/notarytool/stapler/spctl — with no `if:` guards to reuse.
+  #
+  # `needs: build` serialises it behind macOS for the same reason the macOS
+  # matrix runs `max-parallel: 1`: both legs upload into one draft release, and
+  # only the first to arrive creates it. Running second also means the release
+  # body already exists, so this job needs no changelog step.
+  #
+  # NOT SIGNED. The NSIS installer ships unsigned until a code-signing
+  # certificate exists, so Windows shows a SmartScreen warning on first run.
+  # Auto-update still works: the updater verifies minisign, not Authenticode,
+  # and TAURI_SIGNING_PRIVATE_KEY is platform-agnostic. To sign later, add
+  # `bundle.windows.certificateThumbprint` to tauri.windows.conf.json and supply
+  # the certificate as a secret — deliberately not half-wired here, because an
+  # untested signing path that silently no-ops is worse than its absence.
+  build-windows:
+    needs: [release-secrets, verify, build]
+    runs-on: windows-latest
+    name: Build (Windows-x64)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Create release publisher token
+        id: release-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.PATCHBAY_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PATCHBAY_RELEASE_APP_PRIVATE_KEY }}
+          owner: semantic-craft
+          repositories: patchbay-releases
+          permission-contents: write
+
+      # tauri.windows.conf.json narrows bundle.targets to nsis here, so this
+      # produces the installer plus the .nsis.zip updater artifact and its .sig.
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          CI: "true"
+          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}
+        with:
+          owner: semantic-craft
+          repo: patchbay-releases
+          tagName: v__VERSION__
+          releaseCommitish: main
+          releaseDraft: true
+          prerelease: false
+          retryAttempts: 2
+          args: --target x86_64-pc-windows-msvc
+
+  verify-updater-assets:
+    needs: [build, build-windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: macos-14
+    name: Verify updater assets
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Create release publisher token
+        id: release-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.PATCHBAY_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PATCHBAY_RELEASE_APP_PRIVATE_KEY }}
+          owner: semantic-craft
+          repositories: patchbay-releases
+          permission-contents: write
+
+      - name: Install minisign
+        run: |
+          set -euo pipefail
+          if ! command -v minisign >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
+          fi
+
+      - name: Validate updater metadata and signatures
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          release_json=$(gh release view "${{ github.ref_name }}" \
+            --repo "$RELEASE_REPOSITORY" \
+            --json assets,isDraft,tagName)
+
+          asset_names=$(echo "$release_json" | jq -r '.assets[]?.name')
+
+          if ! echo "$asset_names" | grep -qx 'latest.json'; then
+            echo "Missing updater metadata asset: latest.json"
+            exit 1
+          fi
+
+          if ! echo "$asset_names" | grep -q '\.sig'; then
+            echo "Missing updater signature assets (*.sig)"
+            exit 1
+          fi
+
+          rm -f /tmp/latest.json
+          gh release download "${{ github.ref_name }}" \
+            --repo "$RELEASE_REPOSITORY" \
+            --pattern latest.json \
+            --dir /tmp \
+            --clobber
+
+          jq -r '.plugins.updater.pubkey' src-tauri/tauri.conf.json \
+            | base64 --decode > /tmp/patchbay-updater.pub
+
+          # windows-x86_64 verifies from this macOS runner: the loop derives the
+          # asset name from the metadata URL and checks it with minisign, none
+          # of which cares which platform produced the artifact.
+          for platform in \
+            darwin-aarch64 \
+            darwin-x86_64 \
+            windows-x86_64; do
+            if ! jq -e --arg platform "$platform" \
+              '.platforms[$platform].signature and .platforms[$platform].url' \
+              /tmp/latest.json >/dev/null; then
+              echo "Missing updater metadata for ${platform}"
+              exit 1
+            fi
+
+            url=$(jq -r --arg platform "$platform" '.platforms[$platform].url' /tmp/latest.json)
+            signature=$(jq -r --arg platform "$platform" '.platforms[$platform].signature' /tmp/latest.json)
+            asset_name=${url##*/}
+            if ! echo "$asset_names" | grep -Fxq "$asset_name" || \
+              ! echo "$asset_names" | grep -Fxq "${asset_name}.sig"; then
+              echo "Missing updater artifact or signature asset for ${platform}"
+              exit 1
+            fi
+
+            rm -f "/tmp/$asset_name" "/tmp/${asset_name}.sig"
+            gh release download "${{ github.ref_name }}" \
+              --repo "$RELEASE_REPOSITORY" \
+              --pattern "$asset_name" \
+              --pattern "${asset_name}.sig" \
+              --dir /tmp \
+              --clobber
+
+            uploaded_signature=$(tr -d '\r\n' < "/tmp/${asset_name}.sig")
+            if [ "$uploaded_signature" != "$signature" ]; then
+              echo "Updater signature metadata mismatch for ${platform}"
+              exit 1
+            fi
+            base64 --decode < "/tmp/${asset_name}.sig" > "/tmp/${platform}.minisig"
+            minisign -Vm "/tmp/$asset_name" \
+              -x "/tmp/${platform}.minisig" \
+              -p /tmp/patchbay-updater.pub
+          done
+
+          echo "Updater assets validation passed"
+
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: gh release edit "${{ github.ref_name }}" --repo "$RELEASE_REPOSITORY" --draft=false --latest

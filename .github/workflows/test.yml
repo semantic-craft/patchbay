@@ -1,0 +1,112 @@
+name: Test
+
+# GitHub Actions does not support YAML anchors, so the two path lists are
+# duplicated by necessity — keep them in sync.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  # Both platforms run on GitHub-hosted runners — free for public repositories.
+  # Windows is the only box that compiles the cfg(windows) paths and exercises
+  # the symlink/junction ladder in chain::ops and the containment suites, so it
+  # is not optional.
+  rust-tests:
+    strategy:
+      # A failure on one platform must not cancel the other: the whole point of
+      # the second leg is to see both verdicts.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            label: macOS
+          - runner: windows-latest
+            label: Windows
+
+    runs-on: ${{ matrix.runner }}
+    name: Rust tests (${{ matrix.label }})
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # `components: rustfmt` is required, not decorative: this action installs a
+      # minimal profile, so `cargo fmt` is absent and the formatting check below
+      # fails with "'cargo-fmt' is not installed for the toolchain" rather than
+      # with a formatting diff.
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          components: rustfmt
+
+      # One platform is enough — rustfmt's output does not vary by OS, and a
+      # second copy would only report the same failure twice. Placed before the
+      # cache and the test build so a formatting slip fails in seconds rather
+      # than after a full compile.
+      - name: Check formatting
+        if: runner.os == 'macOS'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri
+
+      # cargo test needs no frontend build: tauri's generate_context only
+      # reads the config, and beforeBuildCommand applies to `tauri build`.
+      - name: Run tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # Windows only: a lingering vctip.exe holds files in target/ open while
+      # the post-job cache save packs them, reddening an otherwise-green run.
+      # A property of the toolchain, not of the code, so it never fails the job.
+      - name: Kill VC telemetry before cache save
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: taskkill /f /im vctip.exe
+
+  # release-contract.test.ts is a release gate, so the frontend suite must run
+  # on every push/PR — not first during the release it is meant to gate. vitest
+  # exercises no platform-specific code, so one cheap Linux leg is enough.
+  frontend-tests:
+    runs-on: ubuntu-latest
+    name: Frontend tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # The same three commands release.yml runs as its release gate, in the
+      # same order, so none can rot unnoticed.
+      - name: Run tests
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
