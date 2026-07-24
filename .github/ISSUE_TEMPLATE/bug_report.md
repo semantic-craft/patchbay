@@ -18,21 +18,23 @@ A short description and steps to reproduce, if possible. Screenshots are welcome
 
 <!--
 In Patchbay → Settings → About, click "Report Issue".
-It copies app version, OS, central repo path, AND a recent log excerpt to the clipboard.
-Paste it here (Ctrl+V / Cmd+V).
+Before pasting, remove tokens, credentials, private repository URLs, personal
+data, user or machine names, and absolute file-system paths. Share only the
+minimum excerpt needed to reproduce the problem.
 
 打开 Patchbay → 设置 → 关于，点「报告问题」按钮，
-应用会自动复制版本号、系统信息、中央仓库路径和最近日志摘要到剪贴板，直接粘贴到这里即可。
+粘贴前请删除 token、凭据、私有仓库地址、个人数据、用户名或机器名以及绝对路径；
+只公开复现问题所必需的最小日志片段。
 -->
 
 
 ## Full logs (optional) / 完整日志（可选）
 
 <!--
-For complex issues, click "Export Logs" in Settings → About.
-A zip will be saved to your Downloads folder — drag it into this issue's attachment area.
+Do not attach full logs or exported log archives to a public issue. If a
+maintainer needs security-sensitive diagnostics, use the repository's private
+security-reporting channel instead.
 
-对于复杂问题，请点「导出日志」按钮，应用会在下载文件夹生成 zip 文件，
-直接把 zip 拖到本 issue 的附件区即可。
+不要在公开 issue 中附加完整日志或导出的日志压缩包。如维护者确实需要敏感诊断信息，
+请改用仓库的私密安全报告渠道。
 -->
-
