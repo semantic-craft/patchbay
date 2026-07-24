@@ -4160,10 +4160,7 @@ branch = "main"
                 "git@example.invalid:team/alpha.git",
             ],
         );
-        git(
-            &alpha,
-            &["remote", "add", "test", "gamma:/stale/alpha.git"],
-        );
+        git(&alpha, &["remote", "add", "test", "gamma:/stale/alpha.git"]);
         let origin_before = git_stdout(&alpha, &["config", "--get-regexp", "^remote\\.origin\\."]);
         seed_meta_cache(&fx);
 
@@ -4379,10 +4376,7 @@ branch = "main"
         seed_meta_cache(&fx);
         let alpha = fx.projects.join("alpha");
         let mirror = fx.projects.parent().unwrap().join("mirrors/alpha.git");
-        git(
-            &alpha,
-            &["remote", "add", "test", "gamma:/stale/alpha.git"],
-        );
+        git(&alpha, &["remote", "add", "test", "gamma:/stale/alpha.git"]);
         std::fs::remove_dir_all(&mirror).unwrap();
         let service = FleetService::new(&fx.store);
 
@@ -4589,10 +4583,7 @@ branch = "main"
     #[test]
     fn sanitize_machine_id_produces_stable_slugs() {
         assert_eq!(sanitize_machine_id("Alpha"), "alpha");
-        assert_eq!(
-            sanitize_machine_id("Example Host (2)"),
-            "example-host-2"
-        );
+        assert_eq!(sanitize_machine_id("Example Host (2)"), "example-host-2");
         assert_eq!(sanitize_machine_id("---"), "machine");
     }
 }
