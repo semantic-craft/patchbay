@@ -1,0 +1,24 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#182740"/>
+      <stop offset="1" stop-color="#0b1322"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#panel)"/>
+  <g fill="#0a1220" stroke="#4a5d78" stroke-width="15">
+    <circle cx="292" cy="292" r="60"/>
+    <circle cx="512" cy="292" r="60"/>
+    <circle cx="732" cy="292" r="60"/>
+    <circle cx="292" cy="512" r="60"/>
+    <circle cx="512" cy="512" r="60"/>
+    <circle cx="732" cy="512" r="60"/>
+    <circle cx="292" cy="732" r="60"/>
+    <circle cx="512" cy="732" r="60"/>
+    <circle cx="732" cy="732" r="60"/>
+  </g>
+  <path d="M292 292 C 402 340, 402 400, 402 512 C 402 660, 560 622, 732 732" fill="none" stroke="#0b1322" stroke-width="52" stroke-linecap="round"/>
+  <path d="M292 292 C 402 340, 402 400, 402 512 C 402 660, 560 622, 732 732" fill="none" stroke="#22d3ee" stroke-width="36" stroke-linecap="round"/>
+  <circle cx="292" cy="292" r="30" fill="#22d3ee"/>
+  <circle cx="732" cy="732" r="30" fill="#a78bfa"/>
+</svg>

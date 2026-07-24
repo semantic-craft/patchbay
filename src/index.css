@@ -1,0 +1,267 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Light theme (default) */
+  :root {
+    --app-scale: 1;
+    --color-bg: #FAFAFA;
+    --color-bg-secondary: #F4F4F5;
+    --color-surface: #FFFFFF;
+    --color-surface-hover: #F4F4F5;
+    --color-surface-active: #E4E4E7;
+    --color-border: #D4D4D8;
+    --color-border-subtle: #E4E4E7;
+    --color-text-primary: #18181B;
+    --color-text-secondary: #27272A;
+    --color-text-tertiary: #52525B;
+    --color-text-muted: #71717A;
+    --color-text-faint: #8B8B94;
+    --color-accent: #059669;
+    --color-accent-light: #10B981;
+    --color-accent-dark: #047857;
+    --color-accent-bg: rgba(5,150,105,0.08);
+    --color-accent-border: rgba(5,150,105,0.25);
+    --color-danger: #DC2626;
+    --color-danger-bg: rgba(220,38,38,0.08);
+    /* Liquid Glass (#26): chrome-only materials. `soft` veils the window
+       shell, plain fills floating chrome, `strong` fills what sits on top of
+       it (capsules, active rows). Content keeps --color-surface. */
+    --glass: rgba(255,255,255,0.5);
+    --glass-strong: rgba(255,255,255,0.68);
+    --glass-soft: rgba(255,255,255,0.32);
+    --glass-border: rgba(255,255,255,0.62);
+    /* Top-edge specular highlight, applied as an inset box-shadow. */
+    --glass-highlight: rgba(255,255,255,0.65);
+    /* Divider on glass or wallpaper, where --color-border reads too heavy. */
+    --glass-hairline: rgba(15,20,40,0.1);
+    --glass-blur: blur(24px) saturate(1.6);
+    --glass-shell-blur: blur(34px) saturate(1.7);
+    --glass-card-shadow: 0 8px 24px rgba(25,30,70,0.1);
+    --glass-capsule-shadow: 0 2px 8px rgba(25,30,70,0.08);
+    /* Height of the drag strip the app draws where the OS hides its title bar.
+       macOS uses titleBarStyle "Overlay"; Windows keeps a native caption bar,
+       so the strip collapses there (see [data-platform="windows"] below) and
+       every dependent offset follows from this one value. */
+    --titlebar-h: 28px;
+    /* The wallpaper every glass surface samples: four diffuse colour fields
+       over a base tint. */
+    --wallpaper:
+      radial-gradient(55% 75% at 12% 8%, #8FD0F6 0%, transparent 60%),
+      radial-gradient(45% 65% at 88% 12%, #C8B8F6 0%, transparent 62%),
+      radial-gradient(60% 55% at 75% 92%, #F6C4D8 0%, transparent 58%),
+      radial-gradient(45% 50% at 18% 88%, #A8ECD4 0%, transparent 55%),
+      #DCE6F4;
+    /* What replaces the wallpaper when a native material sits behind the
+       window (#37): a thin theme-cast tint over the system glass, keeping
+       the colour fields as low-alpha accents so text contrast survives any
+       desktop underneath. */
+    --wallpaper-veil:
+      radial-gradient(55% 75% at 12% 8%, rgba(143,208,246,0.35) 0%, transparent 60%),
+      radial-gradient(45% 65% at 88% 12%, rgba(200,184,246,0.35) 0%, transparent 62%),
+      radial-gradient(60% 55% at 75% 92%, rgba(246,196,216,0.32) 0%, transparent 58%),
+      radial-gradient(45% 50% at 18% 88%, rgba(168,236,212,0.30) 0%, transparent 55%),
+      rgba(220,230,244,0.38);
+  }
+
+  /* Dark theme */
+  .dark {
+    --color-bg: #0C0C0F;
+    --color-bg-secondary: #0F0F13;
+    --color-surface: #131317;
+    --color-surface-hover: #17171E;
+    --color-surface-active: #1E1E28;
+    --color-border: #222229;
+    --color-border-subtle: #1C1C22;
+    --color-text-primary: #F4F4F5;
+    --color-text-secondary: #D4D4D8;
+    --color-text-tertiary: #A1A1AA;
+    --color-text-muted: #8E8E96;
+    --color-text-faint: #71717A;
+    --color-accent: #10B981;
+    --color-accent-light: #34D399;
+    --color-accent-dark: #059669;
+    --color-accent-bg: rgba(16,185,129,0.08);
+    --color-accent-border: rgba(16,185,129,0.25);
+    --color-danger: #EF4444;
+    --color-danger-bg: rgba(239,68,68,0.08);
+    --glass: rgba(28,30,48,0.5);
+    --glass-strong: rgba(36,38,60,0.62);
+    --glass-soft: rgba(24,26,44,0.34);
+    --glass-border: rgba(255,255,255,0.16);
+    --glass-highlight: rgba(255,255,255,0.14);
+    --glass-hairline: rgba(255,255,255,0.1);
+    --glass-card-shadow: 0 12px 32px rgba(0,0,10,0.4);
+    --glass-capsule-shadow: 0 2px 10px rgba(0,0,10,0.35);
+    --wallpaper:
+      radial-gradient(55% 75% at 12% 8%, #23456E 0%, transparent 62%),
+      radial-gradient(45% 65% at 88% 12%, #45336E 0%, transparent 62%),
+      radial-gradient(60% 55% at 75% 92%, #5E2E4E 0%, transparent 58%),
+      radial-gradient(45% 50% at 18% 88%, #1C4A42 0%, transparent 55%),
+      #10131F;
+    --wallpaper-veil:
+      radial-gradient(55% 75% at 12% 8%, rgba(35,69,110,0.45) 0%, transparent 62%),
+      radial-gradient(45% 65% at 88% 12%, rgba(69,51,110,0.45) 0%, transparent 62%),
+      radial-gradient(60% 55% at 75% 92%, rgba(94,46,78,0.40) 0%, transparent 58%),
+      radial-gradient(45% 50% at 18% 88%, rgba(28,74,66,0.38) 0%, transparent 55%),
+      rgba(16,19,31,0.52);
+  }
+
+  /* System preference fallback (when no .dark class and user chose "system") */
+  @media (prefers-color-scheme: dark) {
+    :root:not(.dark) {
+      /* JS will add .dark class, but this is a brief fallback */
+    }
+  }
+
+  html,
+  body,
+  #root {
+    height: calc(100vh / var(--app-scale));
+    width: calc(100vw / var(--app-scale));
+  }
+
+  body {
+    @apply text-primary font-sans antialiased overflow-hidden;
+    background: var(--wallpaper);
+    letter-spacing: -0.005em;
+  }
+
+  /* Window-level glass (#37): the frontend sets data-window-glass on <html>
+     only after the backend confirms a native material (NSGlassEffectView or
+     NSVisualEffectView) is behind the transparent window. Until then — and
+     forever, when the apply failed — the opaque wallpaper above keeps the
+     window covered. */
+  :root[data-window-glass] body {
+    background: var(--wallpaper-veil);
+  }
+
+  /* Windows draws its own caption bar, so the app's drag strip would be a
+     second one stacked below it. Collapsing the variable removes the strip and
+     every offset that derives from it in one place. */
+  :root[data-platform="windows"] {
+    --titlebar-h: 0px;
+  }
+}
+
+@layer components {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Liquid Glass chrome (#26/#28). Glass is a chrome-only material: the window
+     shell, the sidebar and the workbench's cards float over the wallpaper.
+     Content stays near-solid on .app-panel — glass behind a list of paths and
+     statuses costs more legibility than it buys. */
+
+  /* The window shell: one veil over the wallpaper that every other glass
+     surface is then layered on. */
+  .app-glass-shell {
+    background: var(--glass-soft);
+    backdrop-filter: var(--glass-shell-blur);
+    -webkit-backdrop-filter: var(--glass-shell-blur);
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Chrome flush against the window edge (the sidebar): the material without a
+     card's radius, border or shadow. */
+  .app-glass-chrome {
+    background: var(--glass);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+  }
+
+  /* A floating glass card (the workbench's blocks). */
+  .app-glass-card {
+    background: var(--glass);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-card-shadow);
+  }
+
+  .app-page {
+    @apply mx-auto flex min-h-full w-full max-w-[1200px] flex-col gap-6 pb-8;
+  }
+
+  .app-page-narrow {
+    @apply max-w-[1040px];
+  }
+
+  /* Sits directly on the wallpaper, so it takes the hairline rather than the
+     panel border. */
+  .app-page-header {
+    @apply border-b pb-4;
+    border-bottom-color: var(--glass-hairline);
+  }
+
+  .app-page-title {
+    @apply text-[17px] font-semibold tracking-tight text-primary;
+  }
+
+  .app-page-subtitle {
+    @apply mt-1.5 text-[13px] leading-5 text-muted;
+  }
+
+  .app-section-title {
+    @apply text-[12px] font-semibold uppercase tracking-[0.08em] text-muted;
+  }
+
+  .app-panel {
+    @apply rounded-xl border border-border-subtle bg-surface;
+  }
+
+  .app-panel-muted {
+    @apply rounded-xl border border-border-subtle bg-bg-secondary;
+  }
+
+  .app-toolbar {
+    @apply flex flex-wrap items-center justify-between gap-3;
+  }
+
+  .app-input {
+    @apply h-10 rounded-lg border border-border-subtle bg-surface px-3 text-[13px] text-secondary outline-none transition-colors placeholder:text-faint focus:border-border;
+  }
+
+  .app-segmented {
+    @apply flex rounded-lg border border-border-subtle bg-surface p-0.5;
+  }
+
+  .app-segmented-button {
+    @apply rounded-md px-3 py-2 text-[13px] font-medium text-muted transition-colors outline-none hover:text-tertiary;
+  }
+
+  .app-segmented-button-active {
+    @apply bg-surface-active text-secondary;
+  }
+
+  .app-button-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-accent-border bg-accent-dark px-4 py-2.5 text-[13px] font-medium text-white transition-colors outline-none hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50;
+    box-shadow: 0 4px 14px var(--color-accent-border);
+  }
+
+  /* A glass capsule: it lives on chrome, so it carries the material itself. */
+  .app-button-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-medium text-secondary outline-none disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-capsule-shadow);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: transform 0.1s ease;
+  }
+
+  .app-button-secondary:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .app-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-hover px-2.5 py-1 text-[12px] font-medium text-tertiary;
+  }
+}
