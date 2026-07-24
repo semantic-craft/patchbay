@@ -5,7 +5,7 @@ description = "Patchbay - AI Agent Skills Control Plane"
 authors = ["tianliang"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88.0"
 default-run = "patchbay"
 
 [lib]
@@ -37,12 +37,12 @@ fs2 = "0.4"
 unicode-normalization = "0.1"
 caseless = "0.2"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
-anyhow = "1.0"
+anyhow = "1.0.103"
 chrono = "0.4"
 gethostname = "1"
 serde_yaml = "0.9"
 toml = "0.8"
-git2 = { version = "0.19", features = ["vendored-openssl"] }
+git2 = { version = "0.20", features = ["vendored-openssl"] }
 tokio = { version = "1", features = ["full"] }
 regex = "1"
 hex = "0.4"
