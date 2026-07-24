@@ -226,18 +226,28 @@ mod tests {
     /// next time it is loaded, not left as-is forever.
     #[test]
     fn loading_an_existing_key_re_restricts_it() {
-        // The Windows half needs a fixture that *starts* with inherited ACEs,
-        // so it must sit under the user profile. Do not fall back to the
-        // default temp directory: on a self-hosted box TEMP happens to resolve
-        // under the profile and inherits, but on a hosted runner it is a
-        // separate volume that does not — which is a property of the runner,
-        // not of the code under test.
-        #[cfg(windows)]
-        let tmp = tempfile::Builder::new()
-            .tempdir_in(std::env::var("USERPROFILE").expect("USERPROFILE is set on Windows"))
-            .unwrap();
-        #[cfg(not(windows))]
         let tmp = tempfile::tempdir().unwrap();
+
+        // The Windows half asserts that loading strips an inherited ACE, so the
+        // fixture must start with one. Establish that here rather than assume
+        // the directory happens to provide it: whether a fresh file inherits
+        // depends on where TEMP lands, which is a property of the machine, not
+        // of the code under test. BUILTIN\Users is addressed by SID so the
+        // grant does not depend on the system locale.
+        #[cfg(windows)]
+        {
+            let out = std::process::Command::new("icacls")
+                .arg(tmp.path())
+                .args(["/grant", "*S-1-5-32-545:(OI)(CI)(R)"])
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "could not seed an inheritable ACE on the fixture directory:\n{}\n{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr),
+            );
+        }
 
         let path = tmp.path().join(".secret.key");
         std::fs::write(&path, [7u8; 32]).unwrap();
@@ -263,9 +273,11 @@ mod tests {
                     .unwrap();
                 String::from_utf8_lossy(&out.stdout).into_owned()
             };
+            let seeded = acl_of(&path);
             assert!(
-                acl_of(&path).contains("(I)"),
-                "fixture precondition: a fresh file under the profile inherits ACEs"
+                seeded.contains("(I)"),
+                "fixture precondition: the key file should have inherited the ACE \
+                 seeded on its directory.\nicacls output was:\n{seeded}"
             );
             assert_eq!(load_or_create_key(&path).unwrap(), [7u8; 32]);
             assert!(
