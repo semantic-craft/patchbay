@@ -202,20 +202,20 @@ mod tests {
 [fleet]
 projects_root = "~/Projects"
 
-[hub.metis]
-url = "metis:git-mirrors/projects"
-host_machine = "metis"
+[hub.alpha]
+url = "alpha:git-mirrors/projects"
+host_machine = "alpha"
 
 [[repo]]
 name = "prompt-optimizer"
-hub = "metis"
-authority = "metis"
+hub = "alpha"
+authority = "alpha"
 branch = "main"
 
 [[repo]]
 name = "paperdock"
-hub = "metis"
-authority = "helios"
+hub = "alpha"
+authority = "gamma"
 branch = "main"
 auto_sync = true
 "#;
@@ -224,12 +224,12 @@ auto_sync = true
     fn parses_sample_manifest() {
         let m = parse(SAMPLE).unwrap();
         assert_eq!(m.fleet.projects_root.as_deref(), Some("~/Projects"));
-        assert_eq!(m.hubs["metis"].url, "metis:git-mirrors/projects");
-        assert_eq!(m.hubs["metis"].host_machine.as_deref(), Some("metis"));
+        assert_eq!(m.hubs["alpha"].url, "alpha:git-mirrors/projects");
+        assert_eq!(m.hubs["alpha"].host_machine.as_deref(), Some("alpha"));
         assert_eq!(m.repos.len(), 2);
         assert_eq!(m.repos[0].name, "prompt-optimizer");
         assert!(!m.repos[0].auto_sync);
-        assert_eq!(m.repos[1].authority, "helios");
+        assert_eq!(m.repos[1].authority, "gamma");
         assert!(m.repos[1].auto_sync);
     }
 
@@ -239,7 +239,7 @@ auto_sync = true
         let text = to_toml(&m).unwrap();
         let again = parse(&text).unwrap();
         assert_eq!(again.repos.len(), 2);
-        assert_eq!(again.hubs["metis"].url, m.hubs["metis"].url);
+        assert_eq!(again.hubs["alpha"].url, m.hubs["alpha"].url);
         assert!(!again.repos[0].auto_sync);
         assert!(again.repos[1].auto_sync);
     }
@@ -306,15 +306,15 @@ url = "ext::sh -c 'touch /tmp/pwned'"
             );
         }
         assert!(
-            check_remote_url("metis:/Users/me/git-mirrors/projects/_patchbay-fleet.git").is_ok()
+            check_remote_url("alpha:/Users/me/git-mirrors/projects/_patchbay-fleet.git").is_ok()
         );
     }
 
     #[test]
     fn accepts_the_hub_forms_the_design_contemplates() {
         for url in [
-            "metis:git-mirrors/projects",
-            "metis:/Users/me/git-mirrors/projects",
+            "alpha:git-mirrors/projects",
+            "alpha:/Users/me/git-mirrors/projects",
             "/Users/me/git-mirrors/projects",
             "https://example.com/mirrors",
             "ssh://host/srv/mirrors",
@@ -374,10 +374,10 @@ branch = "{}"
     #[test]
     fn hub_resolves_to_local_home_path_on_host_machine() {
         let hub = Hub {
-            url: "metis:git-mirrors/projects".into(),
-            host_machine: Some("metis".into()),
+            url: "alpha:git-mirrors/projects".into(),
+            host_machine: Some("alpha".into()),
         };
-        let base = resolve_hub_base(&hub, "metis");
+        let base = resolve_hub_base(&hub, "alpha");
         let expected = dirs::home_dir()
             .unwrap()
             .join("git-mirrors/projects")
@@ -386,8 +386,8 @@ branch = "{}"
         assert_eq!(base, expected);
         // Other machines keep the ssh form untouched.
         assert_eq!(
-            resolve_hub_base(&hub, "helios"),
-            "metis:git-mirrors/projects"
+            resolve_hub_base(&hub, "gamma"),
+            "alpha:git-mirrors/projects"
         );
     }
 
@@ -395,25 +395,25 @@ branch = "{}"
     fn hub_resolution_leaves_scheme_urls_and_absolute_paths_alone() {
         let https = Hub {
             url: "https://example.com/mirrors".into(),
-            host_machine: Some("metis".into()),
+            host_machine: Some("alpha".into()),
         };
         assert_eq!(
-            resolve_hub_base(&https, "metis"),
+            resolve_hub_base(&https, "alpha"),
             "https://example.com/mirrors"
         );
 
         let abs = Hub {
-            url: "metis:/srv/mirrors".into(),
-            host_machine: Some("metis".into()),
+            url: "alpha:/srv/mirrors".into(),
+            host_machine: Some("alpha".into()),
         };
-        assert_eq!(resolve_hub_base(&abs, "metis"), "/srv/mirrors");
+        assert_eq!(resolve_hub_base(&abs, "alpha"), "/srv/mirrors");
     }
 
     #[test]
     fn repo_url_joins_and_trims() {
         assert_eq!(
-            repo_url("metis:git-mirrors/projects", "a"),
-            "metis:git-mirrors/projects/a.git"
+            repo_url("alpha:git-mirrors/projects", "a"),
+            "alpha:git-mirrors/projects/a.git"
         );
         assert_eq!(repo_url("/srv/mirrors/", "a"), "/srv/mirrors/a.git");
     }

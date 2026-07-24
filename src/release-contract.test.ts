@@ -210,46 +210,36 @@ describe("Patchbay release contract", () => {
     );
   });
 
-  it("runs the release pipeline only on the repository-scoped designated macOS runner", () => {
+  it("runs the release pipeline on GitHub-hosted runners", () => {
     const releaseWorkflow = read(".github/workflows/release.yml");
     const prepareWorkflow = read(".github/workflows/prepare-release.yml");
-    const runnerSelector = "runs-on: [self-hosted, macOS, ARM64, patchbay-release]";
 
-    const escapedSelector = runnerSelector.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      "\\$&",
-    );
+    // Self-hosted runners are retired: nothing routes to our own boxes anymore.
+    expect(releaseWorkflow).not.toContain("self-hosted");
+    expect(prepareWorkflow).not.toContain("self-hosted");
 
-    // Still exactly four: the Windows build job carries its own label, so it
-    // cannot occupy a signing-capable slot. 3a9124f made that a definitional
-    // property rather than a convention, and legion has no Authenticode
-    // identity to sign with anyway.
-    expect(releaseWorkflow.match(new RegExp(escapedSelector, "g"))?.length).toBe(4);
-    expect(releaseWorkflow).toContain(
-      "runs-on: [self-hosted, Windows, X64, patchbay-release-windows]",
-    );
-    expect(prepareWorkflow).toContain(runnerSelector);
-    expect(releaseWorkflow).not.toContain("ubuntu-latest");
-    expect(releaseWorkflow).not.toContain("macos-latest");
-    expect(releaseWorkflow).not.toContain("windows-latest");
-    expect(prepareWorkflow).not.toContain("ubuntu-latest");
+    // Signing and notarization need macOS; macos-14 is Apple Silicon and builds
+    // both the arm64 target natively and the x86_64 target by cross-compile.
+    expect(releaseWorkflow).toContain("runs-on: macos-14");
+    expect(releaseWorkflow).toContain("runs-on: windows-latest");
+    // Both macOS legs upload into one draft release, so they must not race.
     expect(releaseWorkflow).toContain("max-parallel: 1");
     expect(releaseWorkflow).toContain('CI: "true"');
-    expect(releaseWorkflow).toContain("LOGIN_KEYCHAIN");
     expect(releaseWorkflow).toContain("retryAttempts: 2");
-    expect(releaseWorkflow).toContain("PATCHBAY_BUILD_KEYCHAIN");
+
+    // Ephemeral-runner keychain pattern: a throwaway keychain in RUNNER_TEMP,
+    // the Developer ID cert imported for codesign. No human login keychain to
+    // protect or restore, so the self-hosted keychain dance and caffeinate are
+    // gone.
+    expect(releaseWorkflow).toContain("$RUNNER_TEMP/patchbay-signing.keychain-db");
+    expect(releaseWorkflow).toContain("security create-keychain");
     expect(releaseWorkflow).toContain("security set-keychain-settings -t 21600");
-    expect(releaseWorkflow).not.toContain("set-keychain-settings -t 21600 -u");
-    expect(releaseWorkflow).toContain(
-      'security list-keychains -d user -s "$KEYCHAIN_PATH" "$ORIGINAL_KEYCHAIN"',
-    );
-    expect(releaseWorkflow).toContain(
-      'grep "Developer ID Application" | head -1',
-    );
-    expect(releaseWorkflow).toContain("caffeinate -ims -t 7200");
-    expect(releaseWorkflow).toContain("Restore runner keychain and sleep policy");
-    expect(releaseWorkflow).not.toContain("cache: npm");
-    expect(prepareWorkflow).not.toContain('cache: "npm"');
+    expect(releaseWorkflow).toContain('grep "Developer ID Application" | head -1');
+    expect(releaseWorkflow).not.toContain("caffeinate");
+    expect(releaseWorkflow).not.toContain("Restore runner keychain");
+
+    // Version bump / tag / dispatch has no native build, so it runs on Linux.
+    expect(prepareWorkflow).toContain("runs-on: ubuntu-latest");
   });
 
   it("commits every file changed by release preparation", () => {

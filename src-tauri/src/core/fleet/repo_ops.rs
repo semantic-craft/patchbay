@@ -6,7 +6,7 @@
 //! guard that proves manifest membership, projects-root containment, authority,
 //! cleanliness or target absence, and complete plan evidence before mutation.
 //!
-//! The local fields deliberately mirror `sync-metis-projects.sh --check`
+//! The local fields deliberately mirror `sync-alpha-projects.sh --check`
 //! (`git status --short | wc -l`, `branch --show-current`,
 //! `rev-parse --short HEAD`) so the two surfaces reconcile line for line.
 
