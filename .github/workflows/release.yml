@@ -60,7 +60,11 @@ jobs:
           exit "$missing"
 
   verify:
-    runs-on: ubuntu-latest
+    # macOS, not Linux: the gates include `cargo test`, and compiling the tauri
+    # stack on Linux needs webkit2gtk/gtk system headers that hosted ubuntu
+    # images do not carry. Running the gates on the platform we actually ship
+    # from also keeps them representative.
+    runs-on: macos-14
     name: Verify release candidate
     steps:
       - name: Checkout repository
