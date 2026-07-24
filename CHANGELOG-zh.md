@@ -5,6 +5,29 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.32.0] - 2026-07-24
+
+### 发布概览
+- Patchbay 正式开源:仓库以 MIT 许可公开、历史为干净根。本版是第一个完全在 GitHub 托管 runner 上构建、签名、公证并发布的版本,发布链路不再依赖任何自建 runner。
+- Patchbay 重新成为多平台应用:1.31.0 说明中「产品范围收敛为 macOS-only 后放弃 Windows 支持(#47)」已不再成立,#58 恢复了 Windows 支持。旧条目按当时决策原样保留,本节即为其反转。
+
+### 面向用户
+- **Windows 版开始发布** —— `release.yml` 新增 `build-windows` 任务,产出 NSIS 安装包。安装包**未签名**,首次运行会出现 SmartScreen 提示;自动更新不受影响,因为更新器校验的是 minisign 签名而非 Authenticode。
+
+### 开发者与治理
+- Windows `cargo test` 从 631 通过 / 53 失败提升到 812 通过 / 0 失败:模块级 `#[cfg(all(test, unix))]` 门全部移除,软链夹具经共享 `core::test_support` 在 Windows 上以 junction 兜底运行,无需开发者模式。
+- 移植暴露并修复的真实 Windows 缺陷:`resolve_hub_base` 误用 `is_absolute()`;`chain::ops::make_symlink` 缺 junction 兜底;六处 `remove_file` 无法删除目录软链;`AGENT_SURFACES` 手拼相对路径(已收敛到 `project_links::surface_path`);`patchbay-cli` 只读 `$HOME`;`Cargo.toml` 版本停在 1.0.0。
+- `content_hash` 此前仅在 unix 折叠可执行位,同一技能跨系统哈希不同,混合机队对比会出现幻影差异;现统一折叠、默认「非可执行」,既有 macOS 哈希不变。
+- AES-256-GCM 密钥文件在 Windows 上收紧权限(去除继承,仅 owner 与 SYSTEM),且每次加载时重新收紧,旧密钥自动自愈。
+- `npm test`(含发布闸 `release-contract.test.ts`)改为在 PR 上运行,而非首次执行于 tag 已推送之后。
+- CI 全部运行在 GitHub 托管 runner(`macos-14` / `windows-latest` / `ubuntu-latest`):每次 push/PR 跑测试与服务端密钥扫描(`security.yml`),Claude 工作流仅响应仓库 owner/member/collaborator。
+- 测试夹具不再依赖运行机器:Windows 密钥文件夹具自行种入可继承 ACL,不再假设 TEMP 落点;fleet 夹具固定设备名,不再读取真实主机名。
+- 依赖治理:升级存在漏洞的 npm 与 Rust 依赖;更新 GitHub Action 运行时。
+
+### 已知空缺
+- Windows 安装包有意保持未签名:签名需在 `tauri.windows.conf.json` 配置 `certificateThumbprint` 并在 runner 导入证书;半接线、静默失效的签名路径比可见的缺失更糟。
+- `prompt-optimizer` 在 #47 P3 闸的往返只验证了一半:非权威机已从 hub 快进,但提交并推送一侧属于权威机,无法从非权威机驱动。
+
 ## [1.31.0] - 2026-07-18
 
 ### 发布概览

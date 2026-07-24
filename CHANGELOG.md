@@ -5,9 +5,10 @@ All notable changes to Patchbay since its first independent release are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.32.0] - 2026-07-24
 
 ### Release Overview
+- Patchbay is open source. The repository is public under MIT with a clean root, and this is the first release built, signed, notarized and published entirely on GitHub-hosted CI — no self-hosted infrastructure anywhere in the pipeline.
 - Patchbay is multi-platform again. The 1.31.0 note below records that Windows support "was dropped when the product scope narrowed to macOS-only (#47)" — that is no longer true, and #58 reverses it. The entry is left standing because it was the decision at the time; this section is the reversal.
 
 ### User-facing
@@ -19,9 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `content_hash` folded the executable bit into the digest only on unix, so an identical skill hashed differently per OS and every mixed-fleet comparison saw a phantom change. Now folded everywhere, defaulting to "not executable" — chosen so existing macOS hashes do not move.
 - The AES-256-GCM key file is now restricted on Windows (inheritance dropped, owner plus SYSTEM only), and the restriction is re-asserted whenever the key is loaded, so keys written before this repair themselves.
 - `npm test` — including `release-contract.test.ts`, a release gate — now runs on pull requests instead of only inside `release.yml`, where it first executed after the tag was already pushed.
+- CI runs on GitHub-hosted runners (`macos-14`, `windows-latest`, `ubuntu-latest`): tests on every push and PR, a server-side secret scan (`security.yml`) on every push and PR, and the Claude workflow answers only repository owners, members and collaborators.
+- Test fixtures no longer depend on the machine that runs them: the Windows key-file fixture seeds its own inheritable ACE instead of assuming where TEMP lands, and the fleet fixture pins its device name instead of reading the real hostname.
+- Dependency hygiene: vulnerable npm and Rust dependencies upgraded; GitHub Action runtimes updated.
 
 ### Known gaps
-- Publishing a release now requires the Windows runner to be online: `verify-updater-assets` demands a `windows-x86_64` entry in `latest.json`.
 - The Windows installer is unsigned by choice. Signing means adding `bundle.windows.certificateThumbprint` and importing a certificate on the runner; a half-wired signing path that silently no-ops would be worse than its visible absence.
 - The `prompt-optimizer` round-trip in #47's P3 gate is only half-proven: a non-authority machine fast-forwarded from the hub, but the commit-and-push leg belongs to the authority machine and cannot be driven from a non-authority machine.
 
