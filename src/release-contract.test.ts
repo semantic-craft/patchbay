@@ -298,6 +298,35 @@ describe("Patchbay release contract", () => {
     expect(zhReadme).not.toContain("使用 ad-hoc 签名，未做 Apple 公证");
   });
 
+  // tauri build refuses to run when the npm packages and the Rust crate are on
+  // different minor releases, and nothing else in CI runs tauri build: the
+  // gates are npm test/lint/build plus cargo test, none of which notice. A
+  // dependency bump on one side therefore stayed invisible until the release
+  // itself failed, an hour in. Compare them here instead.
+  it("keeps the Tauri npm packages and Rust crate on one minor release", () => {
+    const pkg = JSON.parse(read("package.json"));
+    const lock = JSON.parse(read("package-lock.json"));
+    const cargoLock = read("src-tauri/Cargo.lock");
+
+    const crate = cargoLock.match(/name = "tauri"\nversion = "(\d+)\.(\d+)\.\d+"/);
+    expect(crate, "tauri crate not found in Cargo.lock").toBeTruthy();
+    const crateMinor = `${crate![1]}.${crate![2]}`;
+
+    for (const name of ["@tauri-apps/api", "@tauri-apps/cli"]) {
+      const entry = lock.packages[`node_modules/${name}`];
+      expect(entry, `${name} missing from package-lock.json`).toBeTruthy();
+      const [major, minor] = entry.version.split(".");
+      expect(
+        `${major}.${minor}`,
+        `${name} ${entry.version} is not on the same minor release as the tauri crate (${crateMinor}.x) — tauri build will refuse to run`,
+      ).toBe(crateMinor);
+    }
+
+    // The declared range must admit the resolved version, or the next install
+    // silently drifts back.
+    expect(pkg.dependencies["@tauri-apps/api"]).toContain(crateMinor);
+  });
+
   it("keeps every shipped version label in sync", () => {
     const pkg = JSON.parse(read("package.json"));
     const lock = JSON.parse(read("package-lock.json"));
