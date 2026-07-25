@@ -1,0 +1,51 @@
+name: Tag Release
+
+# The ruleset on main only lets changes in through a pull request, so the
+# version bump can no longer be tagged in the same run that produces it.
+# Merging the bump PR is the human gate; tagging follows from it.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag-release:
+    # Only branches Prepare Release created, and only when actually merged —
+    # a closed-without-merge PR must not cut a release.
+    if: >-
+      github.event.pull_request.merged &&
+      startsWith(github.event.pull_request.head.ref, 'chore/bump-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Tag and dispatch release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Via env, not inline interpolation: a branch name is attacker-shaped
+          # input and git allows shell metacharacters in it.
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$HEAD_BRANCH" != "chore/bump-${VERSION}" ]; then
+            echo "::error::Branch ${HEAD_BRANCH} does not match merged version ${VERSION}"
+            exit 1
+          fi
+          git tag -a "v${VERSION}" -m "v${VERSION}"
+          git push origin "v${VERSION}"
+          # Tags pushed with GITHUB_TOKEN do not fire release.yml's `push: tags`
+          # trigger, so dispatch it by hand.
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "v${VERSION}"
