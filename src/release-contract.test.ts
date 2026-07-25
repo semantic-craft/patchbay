@@ -247,11 +247,12 @@ describe("Patchbay release contract", () => {
 
     expect(workflow).toContain("Validate release secrets before tagging");
     expect(workflow).toContain("Prepare Release must run from main");
-    expect(workflow).toContain("git push --atomic");
-    expect(workflow).toContain("actions: write");
-    expect(workflow).toContain(
-      'gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "v${VERSION}"',
-    );
+    // A ruleset lets changes into main only through a pull request, so the
+    // bump goes to a branch and tag-release.yml finishes the job on merge.
+    expect(workflow).not.toContain("HEAD:main");
+    expect(workflow).toContain('BRANCH="chore/bump-${VERSION}"');
+    expect(workflow).toContain("gh pr create");
+    expect(workflow).toContain("pull-requests: write");
     expect(workflow).toContain(
       "APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}",
     );
@@ -273,6 +274,27 @@ describe("Patchbay release contract", () => {
     ]) {
       expect(workflow).toContain(path);
     }
+  });
+
+  it("tags and dispatches the release only when a bump PR merges", () => {
+    const workflow = read(".github/workflows/tag-release.yml");
+
+    // Closed-without-merge, or any branch Prepare Release did not create, must
+    // not cut a release.
+    expect(workflow).toContain("types: [closed]");
+    expect(workflow).toContain("github.event.pull_request.merged");
+    expect(workflow).toContain(
+      "startsWith(github.event.pull_request.head.ref, 'chore/bump-')",
+    );
+    expect(workflow).toContain("does not match merged version");
+
+    // Tags are outside the branch ruleset, so this push needs no bypass — but
+    // a tag pushed with GITHUB_TOKEN will not fire release.yml's `push: tags`.
+    expect(workflow).toContain("actions: write");
+    expect(workflow).toContain('git push origin "v${VERSION}"');
+    expect(workflow).toContain(
+      'gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "v${VERSION}"',
+    );
   });
 
   it("does not expose private source links in public release notes", () => {
