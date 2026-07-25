@@ -17,7 +17,7 @@ push/PR via `test.yml`; the release pipeline runs only on version tags.
      and staples it.
    - `windows-latest` builds the NSIS installer (unsigned; auto-update still
      works via minisign).
-   - Artifacts publish to the `patchbay-releases` repo as a draft, which is
+   - Artifacts publish to this repository as a draft release, which is
      verified (checksums, updater signatures) and then flipped to latest.
 
 Everything runs on ephemeral hosted runners — no self-hosted infrastructure.
@@ -39,14 +39,20 @@ release.
 | `APPLE_ID` | Apple ID for notarization |
 | `APPLE_PASSWORD` | app-specific password for notarization |
 | `APPLE_TEAM_ID` | Apple Developer Team ID |
-| `PATCHBAY_RELEASE_APP_PRIVATE_KEY` | GitHub App key that publishes to `patchbay-releases` |
 
 **Variables**
 
 | Name | Purpose |
 |------|---------|
 | `PATCHBAY_GITHUB_APP_CLIENT_ID` | client id of the in-app backup GitHub App |
-| `PATCHBAY_RELEASE_APP_CLIENT_ID` | client id of the release-publisher GitHub App |
 
 On a public repository, GitHub withholds these from fork-based pull requests, so
 they are exposed only to tag-triggered release runs from this repo.
+
+## Why there is no publisher credential
+
+Releases go to this repository using the workflow's built-in `GITHUB_TOKEN`,
+so there is nothing to rotate or renew. Artifacts used to land in a separate
+downloads repo — necessary while the source was private — and reaching across
+repositories required a GitHub App with its own client id and private key.
+Publishing where the source already lives removed that whole surface.

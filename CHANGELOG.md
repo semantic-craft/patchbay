@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patchbay is multi-platform again. The 1.31.0 note below records that Windows support "was dropped when the product scope narrowed to macOS-only (#47)" — that is no longer true, and #58 reverses it. The entry is left standing because it was the decision at the time; this section is the reversal.
 
 ### User-facing
+- **Downloads moved to this repository.** Releases are published here instead of a separate downloads repo, so the app's update feed changed. Installs of 1.31.0 and earlier point at the old feed and will not see this release automatically — download 1.32.0 once from the Releases page and auto-update resumes from then on.
 - **Windows builds ship** — `release.yml` gained a `build-windows` job producing an NSIS installer. It is **unsigned**, so Windows shows a SmartScreen warning on first run; auto-update still works, because the updater verifies minisign rather than Authenticode.
 
 ### Developer & Governance

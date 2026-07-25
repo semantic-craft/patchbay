@@ -56,8 +56,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          PATCHBAY_RELEASE_APP_CLIENT_ID: ${{ vars.PATCHBAY_RELEASE_APP_CLIENT_ID }}
-          PATCHBAY_RELEASE_APP_PRIVATE_KEY: ${{ secrets.PATCHBAY_RELEASE_APP_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -70,17 +68,12 @@ jobs:
             KEYCHAIN_PASSWORD \
             APPLE_ID \
             APPLE_PASSWORD \
-            APPLE_TEAM_ID \
-            PATCHBAY_RELEASE_APP_PRIVATE_KEY; do
+            APPLE_TEAM_ID; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing required repository secret: ${name}"
               missing=1
             fi
           done
-          if [ -z "$PATCHBAY_RELEASE_APP_CLIENT_ID" ]; then
-            echo "::error::Missing required repository variable: PATCHBAY_RELEASE_APP_CLIENT_ID"
-            missing=1
-          fi
           exit "$missing"
 
       - name: Configure Git
