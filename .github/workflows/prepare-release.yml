@@ -15,11 +15,11 @@ on:
 
 permissions:
   contents: write
-  actions: write
+  pull-requests: write
 
 jobs:
-  # No native build here — this job only bumps the version, tags, and dispatches
-  # release.yml — so it runs on the cheapest hosted runner.
+  # No native build here — this job only bumps the version and opens the bump
+  # PR — so it runs on the cheapest hosted runner.
   prepare-release:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
@@ -84,11 +84,17 @@ jobs:
       - name: Prepare release files
         run: npm run release:prepare -- ${{ inputs.release_type }}
 
-      - name: Commit, tag, and dispatch release
+      # A ruleset on main requires every change to arrive through a pull
+      # request, so the bump lands on a branch and tag-release.yml takes over
+      # once a human merges it.
+      - name: Commit bump and open pull request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           VERSION=$(node -p "require('./package.json').version")
+          BRANCH="chore/bump-${VERSION}"
+          git switch -c "$BRANCH"
           git add \
             CHANGELOG.md \
             CHANGELOG-zh.md \
@@ -101,6 +107,9 @@ jobs:
             src/i18n/zh.json \
             src/i18n/zh-TW.json
           git commit -m "chore: bump version to ${VERSION}"
-          git tag -a "v${VERSION}" -m "v${VERSION}"
-          git push --atomic origin HEAD:main "v${VERSION}"
-          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "v${VERSION}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: bump version to ${VERSION}" \
+            --body "Opened by the Prepare Release workflow. Merging this tags v${VERSION} on the merge commit and starts Build & Release. Fill in any changelog placeholders first."
