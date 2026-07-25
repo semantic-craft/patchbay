@@ -87,9 +87,6 @@ describe("Patchbay release contract", () => {
     expect(releaseWorkflow).toContain(
       "PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}",
     );
-    expect(releaseWorkflow).toContain(
-      "PATCHBAY_RELEASE_APP_CLIENT_ID: ${{ vars.PATCHBAY_RELEASE_APP_CLIENT_ID }}",
-    );
   });
 
   it("builds signed updater artifacts for macOS from the base config", () => {
@@ -101,7 +98,7 @@ describe("Patchbay release contract", () => {
     // byte-identical while Windows ships.
     expect(config.bundle.targets).toEqual(["app", "dmg"]);
     expect(config.plugins.updater.endpoints).toEqual([
-      "https://github.com/semantic-craft/patchbay-releases/releases/latest/download/latest.json",
+      "https://github.com/semantic-craft/patchbay/releases/latest/download/latest.json",
     ]);
   });
 
@@ -182,12 +179,15 @@ describe("Patchbay release contract", () => {
     expect(workflow).toContain('gh release upload "$GITHUB_REF_NAME"');
     expect(workflow).toContain('gh release download "$GITHUB_REF_NAME"');
     expect(workflow).toContain('gh release view "${{ github.ref_name }}"');
-    expect(workflow).toContain(
-      "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
-    );
-    expect(workflow).toContain("RELEASE_REPOSITORY: semantic-craft/patchbay-releases");
-    expect(workflow).toContain("repo: patchbay-releases");
-    expect(workflow).toContain('GH_TOKEN: ${{ steps.release-token.outputs.token }}');
+    // Releases publish to this repository with the built-in token. The separate
+    // patchbay-releases repo — and the GitHub App minted to write across to it —
+    // existed only because the source used to be private.
+    expect(workflow).toContain("RELEASE_REPOSITORY: ${{ github.repository }}");
+    expect(workflow).not.toContain("patchbay-releases");
+    expect(workflow).not.toContain("create-github-app-token");
+    expect(workflow).not.toContain("PATCHBAY_RELEASE_APP");
+    expect(workflow).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
+    expect(workflow).toContain("contents: write");
     expect(workflow).toContain('--repo "$RELEASE_REPOSITORY"');
     expect(workflow).toContain("--clobber");
     expect(workflow).toContain("Uploaded DMG checksum mismatch");
@@ -283,7 +283,7 @@ describe("Patchbay release contract", () => {
 
   it("refreshes release metadata from the Patchbay repository", () => {
     expect(read("scripts/gen-star-history.py")).toContain(
-      'REPO = "semantic-craft/patchbay-releases"',
+      'REPO = "semantic-craft/patchbay"',
     );
   });
 

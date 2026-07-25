@@ -24,7 +24,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO = "semantic-craft/patchbay-releases"
+REPO = "semantic-craft/patchbay"
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "assets" / "star-history.svg"
 FONT = Path(__file__).resolve().parent / "fonts" / "PatrickHand-Regular.woff2"
