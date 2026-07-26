@@ -73,7 +73,7 @@
       "done": "仓库已推送到 hub",
       "failed": "推送失败",
       "reason": {
-        "repo_not_in_manifest": "该仓库不在 fleet 清单中",
+        "repo_not_in_manifest": "该仓库不在缓存的 fleet 清单中——如果是刚加入的，请先刷新",
         "not_authority": "本机不是该仓库的权威机",
         "path_outside_projects_root": "仓库路径越出已配置的项目根目录",
         "repo_missing": "本地仓库缺失",
@@ -98,7 +98,7 @@
       "done": "仓库已从 hub 快进",
       "failed": "拉取失败",
       "reason": {
-        "repo_not_in_manifest": "该仓库不在 fleet 清单中",
+        "repo_not_in_manifest": "该仓库不在缓存的 fleet 清单中——如果是刚加入的，请先刷新",
         "authority_self_pull": "权威机不得拉取自己的仓库",
         "path_outside_projects_root": "仓库路径越出已配置的项目根目录",
         "repo_missing": "本地仓库缺失",
@@ -162,7 +162,7 @@
       "done": "仓库已从 hub 复原",
       "failed": "复原失败",
       "reason": {
-        "repo_not_in_manifest": "该仓库不在 fleet 清单中",
+        "repo_not_in_manifest": "该仓库不在缓存的 fleet 清单中——如果是刚加入的，请先刷新",
         "path_outside_projects_root": "仓库路径越出已配置的项目根目录",
         "target_exists": "目标路径已存在",
         "target_exists_empty": "目标路径是一个空目录,多半是上次 bootstrap 失败留下的——删除后即可重试",

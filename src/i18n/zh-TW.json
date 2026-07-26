@@ -73,7 +73,7 @@
       "done": "儲存庫已推送到 hub",
       "failed": "推送失敗",
       "reason": {
-        "repo_not_in_manifest": "此儲存庫不在 fleet 清單中",
+        "repo_not_in_manifest": "此儲存庫不在快取的 fleet 清單中——若是剛加入的，請先重新整理",
         "not_authority": "本機不是此儲存庫的權威機",
         "path_outside_projects_root": "儲存庫路徑超出已設定的專案根目錄",
         "repo_missing": "本機儲存庫缺失",
@@ -98,7 +98,7 @@
       "done": "儲存庫已從 hub 快進",
       "failed": "拉取失敗",
       "reason": {
-        "repo_not_in_manifest": "此儲存庫不在 fleet 清單中",
+        "repo_not_in_manifest": "此儲存庫不在快取的 fleet 清單中——若是剛加入的，請先重新整理",
         "authority_self_pull": "權威機不得拉取自己的儲存庫",
         "path_outside_projects_root": "儲存庫路徑超出已設定的專案根目錄",
         "repo_missing": "本機儲存庫缺失",
@@ -162,7 +162,7 @@
       "done": "儲存庫已從 hub 復原",
       "failed": "復原失敗",
       "reason": {
-        "repo_not_in_manifest": "此儲存庫不在 fleet 清單中",
+        "repo_not_in_manifest": "此儲存庫不在快取的 fleet 清單中——若是剛加入的，請先重新整理",
         "path_outside_projects_root": "儲存庫路徑超出已設定的專案根目錄",
         "target_exists": "目標路徑已存在",
         "target_exists_empty": "目標路徑是一個空目錄,多半是上次 bootstrap 失敗留下的——刪除後即可重試",

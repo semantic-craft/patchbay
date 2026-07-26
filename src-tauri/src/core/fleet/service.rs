@@ -829,6 +829,9 @@ impl<'a> FleetService<'a> {
     /// Apply the exact init preview under `fleet.lock`. A fresh manifest and
     /// every machine/path/mirror/remote evidence field are re-checked before
     /// the two allowed mutations: local bare init and hub remote add/set-url.
+    /// Refused items are re-checked too: the refresh cannot run until a missing
+    /// meta bare has been recreated from the cache, so it lands after that
+    /// branch — but it must still land before any refusal is treated as final.
     pub fn apply_init(&self, plan: &FleetInitPlan) -> Result<FleetInitOutcome, AppError> {
         let _lock = FleetLock::acquire(Duration::from_secs(20))?;
         let machine = self.machine_id()?;
@@ -905,29 +908,6 @@ impl<'a> FleetService<'a> {
             }
         }
         .to_string();
-        if plan.items.iter().all(|item| item.status == "refused") {
-            let items = plan
-                .items
-                .iter()
-                .map(|item| FleetInitResult {
-                    repo: item.repo.clone(),
-                    action: "refused".into(),
-                    reason_code: item.reason_code.clone(),
-                    message: item.message.clone(),
-                    mirror_action: item.mirror_action.clone(),
-                    remote_action: item.remote_action.clone(),
-                })
-                .collect::<Vec<_>>();
-            for result in &items {
-                self.log_init_audit(result);
-            }
-            return Ok(FleetInitOutcome {
-                ok: false,
-                machine,
-                meta_repo_action,
-                items,
-            });
-        }
         if let MetaSyncState::Stale { error } = meta.ensure_fresh()? {
             return Err(AppError::git(format!(
                 "fleet init requires fresh fleet metadata; refresh failed: {error}"
@@ -939,13 +919,28 @@ impl<'a> FleetService<'a> {
         let mut items = Vec::with_capacity(plan.items.len());
         for planned in &plan.items {
             if planned.status == "refused" {
-                let result = FleetInitResult {
-                    repo: planned.repo.clone(),
-                    action: "refused".into(),
-                    reason_code: planned.reason_code.clone(),
-                    message: planned.message.clone(),
-                    mirror_action: planned.mirror_action.clone(),
-                    remote_action: planned.remote_action.clone(),
+                // The preview reads the cached manifest offline, so a repo added
+                // to the hub since the last refresh looks unmanaged. The refresh
+                // above is the first chance to tell a real refusal from a stale
+                // one, so re-plan rather than replaying the preview's verdict: a
+                // refusal that no longer holds is drift, and drift is a conflict
+                // the caller re-previews — never a silent pass or a false
+                // "not managed by fleet" that survives every retry.
+                let result = if self
+                    .plan_init_item(&manifest, &root, &machine, &planned.repo)
+                    .status
+                    == "refused"
+                {
+                    FleetInitResult {
+                        repo: planned.repo.clone(),
+                        action: "refused".into(),
+                        reason_code: planned.reason_code.clone(),
+                        message: planned.message.clone(),
+                        mirror_action: planned.mirror_action.clone(),
+                        remote_action: planned.remote_action.clone(),
+                    }
+                } else {
+                    init_conflict(&planned.repo)
                 };
                 self.log_init_audit_with_evidence(&result, planned.evidence.as_ref());
                 items.push(result);
@@ -1193,7 +1188,11 @@ impl<'a> FleetService<'a> {
         name: &str,
     ) -> FleetInitPlanItem {
         let Some(entry) = manifest.repos.iter().find(|entry| entry.name == name) else {
-            return refused_init(name, "repo_not_in_manifest", "repo is not managed by fleet");
+            return refused_init(
+                name,
+                "repo_not_in_manifest",
+                "repo is not in the cached fleet manifest; run fleet status if newly added",
+            );
         };
         if entry.hub == "origin" {
             return refused_init(
@@ -1564,7 +1563,11 @@ impl<'a> FleetService<'a> {
         name: &str,
     ) -> FleetPushPlanItem {
         let Some(entry) = manifest.repos.iter().find(|entry| entry.name == name) else {
-            return refused_push(name, "repo_not_in_manifest", "repo is not managed by fleet");
+            return refused_push(
+                name,
+                "repo_not_in_manifest",
+                "repo is not in the cached fleet manifest; run fleet status if newly added",
+            );
         };
         if entry.authority != machine && entry.authority != manifest::AUTHORITY_SHARED {
             return refused_push(
@@ -1946,7 +1949,7 @@ impl<'a> FleetService<'a> {
             return Err(refused_pull(
                 name,
                 "repo_not_in_manifest",
-                "repo is not managed by fleet",
+                "repo is not in the cached fleet manifest; run fleet status if newly added",
             ));
         };
         if entry.authority == machine && entry.authority != manifest::AUTHORITY_SHARED {
@@ -2202,7 +2205,11 @@ impl<'a> FleetService<'a> {
         name: &str,
     ) -> FleetBootstrapPlanItem {
         let Some(entry) = manifest.repos.iter().find(|entry| entry.name == name) else {
-            return refused_bootstrap(name, "repo_not_in_manifest", "repo is not managed by fleet");
+            return refused_bootstrap(
+                name,
+                "repo_not_in_manifest",
+                "repo is not in the cached fleet manifest; run fleet status if newly added",
+            );
         };
         // The authority machine may bootstrap its own repository. Unlike pull —
         // which moves an existing checkout and could let the hub overwrite the
@@ -4514,6 +4521,55 @@ branch = "main"
             std::fs::rename(&alpha, &outside).unwrap();
             crate::core::test_support::symlink_dir(&outside, &alpha).unwrap();
         });
+    }
+
+    #[test]
+    fn init_apply_refreshes_before_it_trusts_a_stale_manifest_refusal() {
+        let fx = fixture();
+        // Seed the cache from a manifest listing no repos, then add alpha on the
+        // hub: the exact shape of "registered from another machine since this
+        // one last refreshed".
+        update_meta_manifest(&fx, |manifest| {
+            manifest
+                .replace("[hub.test]", "[hub.test]\nhost_machine = \"selfie\"")
+                .replace(
+                    "[[repo]]\nname = \"alpha\"\nhub = \"test\"\nauthority = \"selfie\"\nbranch = \"main\"\n",
+                    "",
+                )
+        });
+        seed_meta_cache(&fx);
+        update_meta_manifest(&fx, |manifest| {
+            format!(
+                "{manifest}\n[[repo]]\nname = \"alpha\"\nhub = \"test\"\nauthority = \"selfie\"\nbranch = \"main\"\n"
+            )
+        });
+        let service = FleetService::new(&fx.store);
+
+        let stale = service.plan_init(&["alpha".to_string()]).unwrap();
+
+        assert_eq!(
+            stale.items[0].reason_code.as_deref(),
+            Some("repo_not_in_manifest"),
+            "the offline preview cannot see a repo added after the last refresh"
+        );
+
+        let outcome = service.apply_init(&stale).unwrap();
+
+        assert!(!outcome.ok);
+        assert_eq!(
+            outcome.items[0].action, "conflict",
+            "apply must refresh and report drift, not replay the stale refusal"
+        );
+        assert_eq!(
+            outcome.items[0].reason_code.as_deref(),
+            Some("plan_conflict")
+        );
+
+        // The refresh really happened, so the retry is no longer stuck on a
+        // refusal that outlives every attempt to act on it.
+        let fresh = service.plan_init(&["alpha".to_string()]).unwrap();
+        assert!(fresh.ok, "items: {:?}", fresh.items);
+        assert_eq!(fresh.items[0].remote_action, "add");
     }
 
     #[test]
