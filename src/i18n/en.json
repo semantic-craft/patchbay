@@ -73,7 +73,7 @@
       "done": "Repository pushed to the hub",
       "failed": "Push failed",
       "reason": {
-        "repo_not_in_manifest": "Repository is not managed by fleet",
+        "repo_not_in_manifest": "Repository is not in the cached fleet manifest — refresh if it was just added",
         "not_authority": "This machine is not the repository authority",
         "path_outside_projects_root": "Repository path escapes the configured projects root",
         "repo_missing": "Local repository is missing",
@@ -98,7 +98,7 @@
       "done": "Repository fast-forwarded from the hub",
       "failed": "Pull failed",
       "reason": {
-        "repo_not_in_manifest": "Repository is not managed by fleet",
+        "repo_not_in_manifest": "Repository is not in the cached fleet manifest — refresh if it was just added",
         "authority_self_pull": "The authority machine must not pull its own repository",
         "path_outside_projects_root": "Repository path escapes the configured projects root",
         "repo_missing": "Local repository is missing",
@@ -162,7 +162,7 @@
       "done": "Repository restored from the hub",
       "failed": "Bootstrap failed",
       "reason": {
-        "repo_not_in_manifest": "Repository is not managed by fleet",
+        "repo_not_in_manifest": "Repository is not in the cached fleet manifest — refresh if it was just added",
         "path_outside_projects_root": "Repository path escapes the configured projects root",
         "target_exists": "The target path already exists",
         "target_exists_empty": "The target path is an empty directory left by a failed bootstrap — remove it to retry",
