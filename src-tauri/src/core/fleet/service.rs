@@ -2790,6 +2790,9 @@ mod tests {
         const ALPHA: &str =
             "[[repo]]\nname = \"alpha\"\nhub = \"test\"\nauthority = \"selfie\"\nbranch = \"main\"\n";
         update_meta_manifest(fx, |manifest| {
+            // Windows checkouts materialize the manifest with CRLF endings;
+            // normalize before the exact-block match below.
+            let manifest = manifest.replace("\r\n", "\n");
             assert!(
                 manifest.contains(ALPHA),
                 "fixture manifest shape changed; this helper would silently stop staling anything"
