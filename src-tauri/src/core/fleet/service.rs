@@ -110,6 +110,36 @@ pub struct FleetReportResult {
     pub report: MachineReport,
 }
 
+/// This payload deliberately does not reuse [`Manifest`]: that storage model's
+/// serde names are the singular TOML tables `hub` and `repo`, while the IPC
+/// contract uses the plural collection names `hubs` and `repos`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FleetManifestPayload {
+    pub fleet: manifest::FleetSection,
+    pub hubs: BTreeMap<String, manifest::Hub>,
+    pub repos: Vec<manifest::RepoEntry>,
+}
+
+impl From<Manifest> for FleetManifestPayload {
+    fn from(manifest: Manifest) -> Self {
+        Self {
+            fleet: manifest.fleet,
+            hubs: manifest.hubs,
+            repos: manifest.repos,
+        }
+    }
+}
+
+impl From<&FleetManifestPayload> for Manifest {
+    fn from(payload: &FleetManifestPayload) -> Self {
+        Self {
+            fleet: payload.fleet.clone(),
+            hubs: payload.hubs.clone(),
+            repos: payload.repos.clone(),
+        }
+    }
+}
+
 /// Fresh editable manifest snapshot. The GUI sends these identity fields back
 /// for preview so a stale editor cannot silently replace newer fleet state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,7 +147,7 @@ pub struct FleetManifestSnapshot {
     pub machine: String,
     pub meta_head: String,
     pub manifest_digest: String,
-    pub manifest: Manifest,
+    pub manifest: FleetManifestPayload,
     pub known_machines: Vec<String>,
 }
 
@@ -137,7 +167,7 @@ pub struct FleetManifestUpdatePlan {
     pub meta_head: String,
     pub manifest_digest: String,
     pub planned_at: i64,
-    pub manifest: Manifest,
+    pub manifest: FleetManifestPayload,
     pub changes: Vec<FleetManifestChange>,
 }
 
@@ -687,7 +717,7 @@ impl<'a> FleetService<'a> {
             machine,
             meta_head,
             manifest_digest,
-            manifest,
+            manifest: manifest.into(),
             known_machines,
         })
     }
@@ -726,7 +756,7 @@ impl<'a> FleetService<'a> {
             meta_head,
             manifest_digest,
             planned_at: chrono::Utc::now().timestamp_millis(),
-            manifest: next,
+            manifest: next.into(),
             changes,
         })
     }
@@ -764,14 +794,15 @@ impl<'a> FleetService<'a> {
                 "machine, manifest, or remote metadata changed after preview",
             ));
         }
-        if plan.manifest.fleet != current.fleet || plan.manifest.hubs != current.hubs {
+        let planned_manifest = Manifest::from(&plan.manifest);
+        if planned_manifest.fleet != current.fleet || planned_manifest.hubs != current.hubs {
             return Ok(conflict(
                 "the confirmed plan changed non-editable manifest fields",
             ));
         }
         let known = known_machine_ids(&meta, &current, &machine);
-        validate_manifest_for_machines(&plan.manifest, &known)?;
-        let exact_changes = manifest_changes(&current, &plan.manifest);
+        validate_manifest_for_machines(&planned_manifest, &known)?;
+        let exact_changes = manifest_changes(&current, &planned_manifest);
         if exact_changes != plan.changes {
             return Ok(conflict(
                 "the confirmed manifest diff does not match its exact plan",
@@ -788,7 +819,7 @@ impl<'a> FleetService<'a> {
                 message: None,
             });
         }
-        let written = meta.write_manifest(&plan.manifest_digest, &plan.manifest)?;
+        let written = meta.write_manifest(&plan.manifest_digest, &planned_manifest)?;
         Ok(FleetManifestUpdateOutcome {
             ok: written.action != "conflict",
             action: written.action,
@@ -3413,6 +3444,111 @@ branch = "main"
             .err()
             .expect("a concurrent bootstrap apply must not acquire fleet.lock");
         assert!(error.message.contains("fleet.lock busy"));
+    }
+
+    fn manifest_ipc_example() -> Manifest {
+        Manifest {
+            fleet: manifest::FleetSection {
+                projects_root: Some("~/Projects".into()),
+            },
+            hubs: BTreeMap::from([(
+                "alpha".into(),
+                manifest::Hub {
+                    url: "alpha:mirrors".into(),
+                    host_machine: Some("alpha".into()),
+                },
+            )]),
+            repos: vec![
+                manifest::RepoEntry {
+                    name: "patchbay".into(),
+                    hub: "alpha".into(),
+                    authority: "alpha".into(),
+                    branch: "main".into(),
+                    auto_sync: false,
+                },
+                manifest::RepoEntry {
+                    name: "paperdock".into(),
+                    hub: "alpha".into(),
+                    authority: "alpha".into(),
+                    branch: "main".into(),
+                    auto_sync: true,
+                },
+            ],
+        }
+    }
+
+    fn frontend_manifest_payload() -> serde_json::Value {
+        serde_json::json!({
+            "fleet": { "projects_root": "~/Projects" },
+            "hubs": {
+                "alpha": { "url": "alpha:mirrors", "host_machine": "alpha" }
+            },
+            "repos": [{
+                "name": "patchbay",
+                "hub": "alpha",
+                "authority": "alpha",
+                "branch": "main"
+            }, {
+                "name": "paperdock",
+                "hub": "alpha",
+                "authority": "alpha",
+                "branch": "main",
+                "auto_sync": true
+            }]
+        })
+    }
+
+    #[test]
+    fn manifest_snapshot_uses_the_frontend_ipc_contract() {
+        let snapshot = FleetManifestSnapshot {
+            machine: "alpha".into(),
+            meta_head: "meta-head-v1".into(),
+            manifest_digest: "manifest-v1".into(),
+            manifest: manifest_ipc_example().into(),
+            known_machines: vec!["alpha".into()],
+        };
+
+        let payload = serde_json::to_value(snapshot).unwrap();
+
+        assert_eq!(payload["manifest"], frontend_manifest_payload());
+    }
+
+    #[test]
+    fn manifest_preview_accepts_the_frontend_snapshot_contract() {
+        let request: FleetManifestUpdateRequest = serde_json::from_value(serde_json::json!({
+            "mode": "preview",
+            "base": {
+                "machine": "alpha",
+                "meta_head": "meta-head-v1",
+                "manifest_digest": "manifest-v1",
+                "manifest": frontend_manifest_payload(),
+                "known_machines": ["alpha"]
+            },
+            "repos": frontend_manifest_payload()["repos"]
+        }))
+        .unwrap();
+
+        let FleetManifestUpdateRequest::Preview { base, repos } = request else {
+            panic!("frontend preview payload must decode as a preview request");
+        };
+        assert_eq!(base.manifest, manifest_ipc_example().into());
+        assert_eq!(repos, manifest_ipc_example().repos);
+    }
+
+    #[test]
+    fn manifest_update_plan_uses_the_frontend_ipc_contract() {
+        let plan = FleetManifestUpdatePlan {
+            machine: "alpha".into(),
+            meta_head: "meta-head-v1".into(),
+            manifest_digest: "manifest-v1".into(),
+            planned_at: 1,
+            manifest: manifest_ipc_example().into(),
+            changes: vec![],
+        };
+
+        let payload = serde_json::to_value(plan).unwrap();
+
+        assert_eq!(payload["manifest"], frontend_manifest_payload());
     }
 
     #[test]
