@@ -598,8 +598,8 @@ mod tests {
             .find_commit(git2::Oid::from_str(&target).unwrap())
             .is_ok());
         assert_eq!(
-            repo.find_remote("origin").unwrap().url(),
-            Some(decoy.to_str().unwrap())
+            repo.find_remote("origin").unwrap().url().unwrap(),
+            decoy.to_str().unwrap()
         );
     }
 
@@ -641,9 +641,13 @@ mod tests {
         clone_branch_with_remote(&file_url(&hub), &dest, "alpha", "main").unwrap();
 
         let repo = git2::Repository::open(&dest).unwrap();
-        assert_eq!(repo.head().unwrap().shorthand(), Some("main"));
+        assert_eq!(repo.head().unwrap().shorthand().unwrap(), "main");
+        let remotes = repo.remotes().unwrap();
         assert_eq!(
-            repo.remotes().unwrap().iter().flatten().collect::<Vec<_>>(),
+            remotes
+                .iter()
+                .map(|name| name.unwrap().unwrap())
+                .collect::<Vec<_>>(),
             vec!["alpha"],
             "the manifest hub must be the sole remote; origin stays free"
         );
@@ -655,7 +659,7 @@ mod tests {
             .references_glob("refs/remotes/**")
             .unwrap()
             .flatten()
-            .filter_map(|r| r.name().map(str::to_string))
+            .map(|r| r.name().unwrap().to_string())
             .collect();
         assert_eq!(
             tracked,

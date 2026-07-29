@@ -184,9 +184,16 @@ fn classify(path: &Path) -> ForkSyncPreview {
     }
 
     // A detached HEAD has no branch whose fork to synchronize.
-    let Some(branch) = current_branch(&repo) else {
-        item.reason = Some("detached".to_string());
-        return item;
+    let branch = match current_branch(&repo) {
+        Ok(Some(branch)) => branch,
+        Ok(None) => {
+            item.reason = Some("detached".to_string());
+            return item;
+        }
+        Err(_) => {
+            item.reason = Some("ambiguous_branch".to_string());
+            return item;
+        }
     };
     item.branch = Some(branch.clone());
     item.source = Some(format!("upstream/{branch}"));
@@ -258,8 +265,19 @@ fn apply_one(item: &ForkSyncPreview) -> ForkSyncResult {
         return skip_result(item, "dirty".to_string());
     }
 
-    let Some(branch) = current_branch(&repo) else {
-        return skip_result(item, "detached".to_string());
+    let branch = match current_branch(&repo) {
+        Ok(Some(branch)) => branch,
+        Ok(None) => return skip_result(item, "detached".to_string()),
+        Err(error) => return error_result(item, "scan_error", error.message()),
+    };
+
+    // Prepare the exact origin remote and its credential callbacks before the
+    // upstream fetch or local fast-forward can mutate any refs or files. In
+    // particular, git2 0.21 reports non-UTF-8 URLs as errors; discovering that
+    // only at push time would leave the local branch advanced without origin.
+    let prepared_push = match prepare_push(&repo, "origin") {
+        Ok(prepared) => prepared,
+        Err((reason, message)) => return error_result(item, reason, &message),
     };
 
     // The only network fetch. A failure is classified and returned; neither the
@@ -305,8 +323,10 @@ fn apply_one(item: &ForkSyncPreview) -> ForkSyncResult {
     // what we are about to push. Only when the local tip is an ancestor of
     // upstream (a genuine fast-forward); otherwise the local branch carries work
     // upstream lacks and we refuse rather than rewrite it.
-    let Some((local_oid, refname)) = local_head(&repo) else {
-        return skip_result(item, "detached".to_string());
+    let (local_oid, refname) = match local_head(&repo) {
+        Ok(Some(head)) => head,
+        Ok(None) => return skip_result(item, "detached".to_string()),
+        Err(error) => return error_result(item, "scan_error", error.message()),
     };
     if local_oid != upstream_oid {
         if !repo
@@ -330,7 +350,7 @@ fn apply_one(item: &ForkSyncPreview) -> ForkSyncResult {
     // Push the upstream commit to origin, FAST-FORWARD ONLY. The refspec carries
     // no leading `+`, so a non-fast-forward is rejected by the remote rather than
     // forced.
-    match push_fast_forward(&repo, "origin", &branch, upstream_oid) {
+    match push_fast_forward(prepared_push, &branch, upstream_oid) {
         PushOutcome::Ok => {
             // Reflect the successful push in the local tracking ref so the
             // post-apply rescan reports origin as current without a re-fetch.
@@ -361,8 +381,45 @@ enum PushOutcome {
     },
 }
 
-/// Push `target_oid` to `refs/heads/<branch>` on `remote_name` by fast-forward
-/// only.
+/// The configured origin remote and credential callbacks validated before any
+/// fork-sync mutation begins.
+struct PreparedPush<'repo> {
+    remote: git2::Remote<'repo>,
+    callbacks: git2::RemoteCallbacks<'static>,
+}
+
+fn prepare_push<'repo>(
+    repo: &'repo git2::Repository,
+    remote_name: &str,
+) -> Result<PreparedPush<'repo>, (&'static str, String)> {
+    let remote = repo.find_remote(remote_name).map_err(|error| {
+        (
+            pull::classify_fetch_reason(&error),
+            error.message().to_string(),
+        )
+    })?;
+    let push_url = remote.pushurl().map_err(|error| {
+        (
+            pull::classify_fetch_reason(&error),
+            error.message().to_string(),
+        )
+    })?;
+    let endpoint = match push_url {
+        Some(push_url) => push_url,
+        None => remote.url().map_err(|error| {
+            (
+                pull::classify_fetch_reason(&error),
+                error.message().to_string(),
+            )
+        })?,
+    };
+    let callbacks =
+        pull::remote_callbacks(endpoint).map_err(|error| ("auth", format!("{error:#}")))?;
+    Ok(PreparedPush { remote, callbacks })
+}
+
+/// Push `target_oid` to `refs/heads/<branch>` on the prepared remote by
+/// fast-forward only.
 ///
 /// The refspec is `"<sha>:refs/heads/<branch>"` — deliberately **without** a
 /// leading `+` — so the remote's fast-forward check rejects any non-descendant
@@ -373,21 +430,14 @@ enum PushOutcome {
 /// [`PushOutcome::Rejected`]. This function never force-pushes, rebases, or
 /// merges.
 fn push_fast_forward(
-    repo: &git2::Repository,
-    remote_name: &str,
+    prepared: PreparedPush<'_>,
     branch: &str,
     target_oid: git2::Oid,
 ) -> PushOutcome {
-    let mut remote = match repo.find_remote(remote_name) {
-        Ok(remote) => remote,
-        Err(e) => {
-            return PushOutcome::Error {
-                reason: pull::classify_fetch_reason(&e),
-                message: e.message().to_string(),
-            }
-        }
-    };
-    let url = remote.url().unwrap_or_default().to_string();
+    let PreparedPush {
+        mut remote,
+        mut callbacks,
+    } = prepared;
     // Non-forcing: no leading `+`. A non-fast-forward is rejected, never forced.
     let refspec = format!("{target_oid}:refs/heads/{branch}");
 
@@ -395,15 +445,6 @@ fn push_fast_forward(
     // this callback even when the transport `push` call returns Ok.
     let rejected: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
     let rejected_cb = rejected.clone();
-    let mut callbacks = match pull::remote_callbacks(&url) {
-        Ok(callbacks) => callbacks,
-        Err(error) => {
-            return PushOutcome::Error {
-                reason: "auth",
-                message: format!("{error:#}"),
-            }
-        }
-    };
     callbacks.push_update_reference(move |refname, status| {
         if let Some(reason) = status {
             rejected_cb
@@ -455,7 +496,13 @@ fn fetch_remote(
         reason: pull::classify_fetch_reason(&e),
         message: e.message().to_string(),
     })?;
-    let url = remote.url().unwrap_or_default().to_string();
+    let url = remote
+        .url()
+        .map(str::to_string)
+        .map_err(|error| FetchFailure {
+            reason: pull::classify_fetch_reason(&error),
+            message: error.message().to_string(),
+        })?;
     let refspec = format!("+refs/heads/{branch}:refs/remotes/{remote_name}/{branch}");
 
     let mut fetch_opts = git2::FetchOptions::new();
@@ -476,20 +523,23 @@ fn fetch_remote(
 }
 
 /// The current local branch name, or `None` when `HEAD` is detached or unborn.
-fn current_branch(repo: &git2::Repository) -> Option<String> {
-    if repo.head_detached().ok()? {
-        return None;
+fn current_branch(repo: &git2::Repository) -> Result<Option<String>, git2::Error> {
+    if repo.head_detached()? {
+        return Ok(None);
     }
-    repo.head().ok()?.shorthand().map(str::to_string)
+    let head = repo.head()?;
+    Ok(Some(head.shorthand()?.to_string()))
 }
 
 /// The current `HEAD` commit oid paired with its fully-qualified ref name, or
 /// `None` when `HEAD` is not on a resolvable branch.
-fn local_head(repo: &git2::Repository) -> Option<(git2::Oid, String)> {
-    let head = repo.head().ok()?;
-    let oid = head.target()?;
+fn local_head(repo: &git2::Repository) -> Result<Option<(git2::Oid, String)>, git2::Error> {
+    let head = repo.head()?;
+    let Some(oid) = head.target() else {
+        return Ok(None);
+    };
     let name = head.name()?.to_string();
-    Some((oid, name))
+    Ok(Some((oid, name)))
 }
 
 /// The oid of a `refs/remotes/<remote>/<branch>` tracking ref, or `None` when it
@@ -501,7 +551,7 @@ fn tracking_oid(repo: &git2::Repository, remote: &str, branch: &str) -> Option<g
 
 /// A remote's fetch URL, or `None` when it is not configured.
 fn remote_url(repo: &git2::Repository, name: &str) -> Option<String> {
-    repo.find_remote(name).ok()?.url().map(str::to_string)
+    repo.find_remote(name).ok()?.url().ok().map(str::to_string)
 }
 
 /// Tracked-file dirtiness (`git status --porcelain -uno`): untracked and ignored
@@ -887,6 +937,84 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(work.join("file.txt")).unwrap(),
             "local edit"
+        );
+    }
+
+    #[test]
+    fn invalid_origin_url_aborts_before_local_fast_forward() {
+        let temp = tempdir().unwrap();
+        let (upstream, origin, work) = fork_fixture(temp.path());
+        push_commit_to(temp.path(), &upstream, |dir| {
+            std::fs::write(dir.join("file.txt"), "from upstream").unwrap();
+        });
+        git(&work, &["fetch", "upstream"]);
+
+        let origin_url = origin.to_string_lossy().replace('\\', "/");
+        git(&work, &["remote", "set-url", "origin", &origin_url]);
+        let plan = preview(&[work.clone()]);
+        assert_eq!(only(&plan).action, "fast_forward");
+        let local_before = head_sha(&work);
+        let origin_before = bare_main(&origin);
+        let worktree_before = std::fs::read(work.join("file.txt")).unwrap();
+
+        // Simulate a config change after preview that leaves the remote present
+        // but makes git2 0.21's fallible UTF-8 URL accessor reject it.
+        let config_path = work.join(".git/config");
+        let mut config = std::fs::read(&config_path).unwrap();
+        let origin_url = origin_url.as_bytes();
+        let start = config
+            .windows(origin_url.len())
+            .position(|window| window == origin_url)
+            .expect("origin URL must be present in the fixture config");
+        config.splice(start..start + origin_url.len(), [0xff]);
+        std::fs::write(&config_path, config).unwrap();
+
+        let result = &apply(&plan)[0];
+        assert_eq!(result.action, "error", "result: {result:?}");
+        assert_eq!(bare_main(&origin), origin_before);
+        assert_eq!(head_sha(&work), local_before);
+        assert_eq!(
+            std::fs::read(work.join("file.txt")).unwrap(),
+            worktree_before
+        );
+    }
+
+    #[test]
+    fn invalid_origin_pushurl_aborts_before_local_fast_forward() {
+        let temp = tempdir().unwrap();
+        let (upstream, origin, work) = fork_fixture(temp.path());
+        push_commit_to(temp.path(), &upstream, |dir| {
+            std::fs::write(dir.join("file.txt"), "from upstream").unwrap();
+        });
+        git(&work, &["fetch", "upstream"]);
+
+        let push_url = "https://push.example.invalid/repo.git";
+        git(&work, &["remote", "set-url", "--push", "origin", push_url]);
+        let plan = preview(&[work.clone()]);
+        assert_eq!(only(&plan).action, "fast_forward");
+        let local_before = head_sha(&work);
+        let origin_before = bare_main(&origin);
+        let worktree_before = std::fs::read(work.join("file.txt")).unwrap();
+
+        // Keep origin's fetch URL valid and corrupt only its independent push
+        // endpoint after preview.
+        let config_path = work.join(".git/config");
+        let mut config = std::fs::read(&config_path).unwrap();
+        let push_url = push_url.as_bytes();
+        let start = config
+            .windows(push_url.len())
+            .position(|window| window == push_url)
+            .expect("origin push URL must be present in the fixture config");
+        config.splice(start..start + push_url.len(), [0xff]);
+        std::fs::write(&config_path, config).unwrap();
+
+        let result = &apply(&plan)[0];
+        assert_eq!(result.action, "error", "result: {result:?}");
+        assert_eq!(bare_main(&origin), origin_before);
+        assert_eq!(head_sha(&work), local_before);
+        assert_eq!(
+            std::fs::read(work.join("file.txt")).unwrap(),
+            worktree_before
         );
     }
 

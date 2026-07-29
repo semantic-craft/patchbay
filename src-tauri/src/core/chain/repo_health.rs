@@ -263,7 +263,18 @@ fn tracking(repo: &git2::Repository) -> Tracking {
             }
         }
     };
-    let branch_name = head.shorthand().map(str::to_string);
+    let branch_name = match head.shorthand() {
+        Ok(name) => Some(name.to_string()),
+        Err(error) => {
+            return Tracking {
+                state: "scan_error".to_string(),
+                ahead: 0,
+                behind: 0,
+                branch: None,
+                error: Some(error.message().to_string()),
+            }
+        }
+    };
     let Some(local_oid) = head.target() else {
         return Tracking::plain("no_upstream", 0, 0, branch_name);
     };
@@ -308,7 +319,7 @@ fn remote_identity(repo: &git2::Repository, name: &str) -> Option<RepoRemote> {
     let remote = repo.find_remote(name).ok()?;
     Some(RepoRemote {
         name: name.to_string(),
-        url: remote.url().unwrap_or_default().to_string(),
+        url: remote.url().ok()?.to_string(),
     })
 }
 
