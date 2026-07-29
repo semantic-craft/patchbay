@@ -5,6 +5,16 @@ All notable changes to Patchbay since its first independent release are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.32.1] - 2026-07-29
+
+### Release Overview
+- 
+
+### User-facing
+- 
+
+### Developer & Governance
+- 
 ## [1.32.0] - 2026-07-24
 
 ### Release Overview
