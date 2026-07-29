@@ -949,6 +949,8 @@ mod tests {
         });
         git(&work, &["fetch", "upstream"]);
 
+        let origin_url = origin.to_string_lossy().replace('\\', "/");
+        git(&work, &["remote", "set-url", "origin", &origin_url]);
         let plan = preview(&[work.clone()]);
         assert_eq!(only(&plan).action, "fast_forward");
         let local_before = head_sha(&work);
@@ -959,7 +961,7 @@ mod tests {
         // but makes git2 0.21's fallible UTF-8 URL accessor reject it.
         let config_path = work.join(".git/config");
         let mut config = std::fs::read(&config_path).unwrap();
-        let origin_url = origin.to_str().unwrap().as_bytes();
+        let origin_url = origin_url.as_bytes();
         let start = config
             .windows(origin_url.len())
             .position(|window| window == origin_url)
