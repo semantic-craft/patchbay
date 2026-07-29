@@ -125,7 +125,7 @@ Cursor · Claude Code · Codex · Grok · OpenCode · Amp · Kilo Code · Roo Co
 
 ### 前置依赖
 
-- Node.js 18+
+- Node.js 20.19+、22.13+ 或 24+
 - Rust 工具链
 - 当前系统的 [Tauri 依赖](https://v2.tauri.app/start/prerequisites/)
 
