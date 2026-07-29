@@ -1959,6 +1959,7 @@ export interface FleetManifestRepo {
   hub: string;
   authority: string;
   branch: string;
+  auto_sync?: boolean;
 }
 
 export interface FleetManifest {

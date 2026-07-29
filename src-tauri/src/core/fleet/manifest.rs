@@ -245,6 +245,26 @@ auto_sync = true
     }
 
     #[test]
+    fn serialized_manifest_keeps_the_meta_repo_toml_contract() {
+        let text = to_toml(&parse(SAMPLE).unwrap()).unwrap();
+        let lines = text.lines().collect::<Vec<_>>();
+
+        assert!(lines.contains(&"[fleet]"));
+        assert!(lines.contains(&"[hub.alpha]"));
+        assert_eq!(lines.iter().filter(|line| **line == "[[repo]]").count(), 2);
+        assert!(!lines.iter().any(|line| line.starts_with("[hubs")));
+        assert!(!lines.iter().any(|line| line.starts_with("[[repos")));
+
+        let document: toml::Value = toml::from_str(&text).unwrap();
+        let repos = document["repo"].as_array().unwrap();
+        assert!(
+            !repos[0].as_table().unwrap().contains_key("auto_sync"),
+            "false auto_sync must remain absent from the shared manifest"
+        );
+        assert_eq!(repos[1]["auto_sync"].as_bool(), Some(true));
+    }
+
+    #[test]
     fn rejects_undefined_hub_reference() {
         let bad = r#"
 [[repo]]
