@@ -148,7 +148,7 @@ The **Help** button in **Settings** mirrors the current product flow: recommende
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20.19+, 22.13+, or 24+
 - Rust toolchain
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS
 

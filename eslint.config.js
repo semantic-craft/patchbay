@@ -19,5 +19,13 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // React Hooks 7.1 adds ESLint 10 support and surfaces these pre-existing
+      // compiler diagnostics. Keep them visible without blocking this upgrade.
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-hooks/refs': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])
