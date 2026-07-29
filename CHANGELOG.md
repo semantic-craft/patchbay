@@ -5,6 +5,22 @@ All notable changes to Patchbay since its first independent release are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.32.1] - 2026-07-29
+
+### Release Overview
+- Stabilizes Fleet manifest editing and synchronization, hardens Git remote preflight behavior, and closes the compatible dependency security updates accumulated since 1.32.0.
+
+### User-facing
+- **Fleet manifest editing works end to end.** The desktop editor now uses a dedicated plural IPC payload while preserving the existing singular TOML schema; add, update, and remove all complete through preview/apply, reject stale plans, and no longer fail on the former `repos.map` mismatch.
+- **Fleet sync recovers from stale cached refusals.** Push, pull, bootstrap, and init re-check eligibility after refreshing the manifest instead of replaying a refusal contradicted by the hub.
+- **Safer Git synchronization.** Remote URL and push URL validation now finishes before any local fast-forward, so malformed configuration aborts without moving the checkout.
+
+### Developer & Governance
+- Migrated `git2` to 0.21 with explicit HTTPS, SSH, and vendored OpenSSL transports plus cross-platform regression coverage.
+- Refreshed Tauri-compatible dependencies, removing the obsolete `rand 0.7` / selector chain and the yanked `num-bigint 0.4.7`; the GTK3/glib 0.18 advisory remains an explicit upstream constraint rather than an unsupported override.
+- Updated React Router to 7.18.2 and the ESLint toolchain to 10.8.0, resolving the compatible security dependency paths while keeping existing React Compiler diagnostics visible under a warning cap.
+- Release preparation now opens a protected-main bump PR; merging it creates the version tag and dispatches the hosted release pipeline.
+
 ## [1.32.0] - 2026-07-24
 
 ### Release Overview
