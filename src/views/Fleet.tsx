@@ -370,7 +370,9 @@ export function Fleet() {
   const openManifestEditor = useCallback(async () => {
     setLoadingManifest(true);
     try {
-      const [snapshot, found] = await Promise.all([fleetManifestGet(), fleetDiscover()]);
+      // Both commands refresh the same fleet meta checkout, so they must not run concurrently.
+      const snapshot = await fleetManifestGet();
+      const found = await fleetDiscover();
       setManifestSnapshot(snapshot);
       setManifestDraft(snapshot.manifest.repos.map((repo) => ({ ...repo })));
       setDiscovery(found);

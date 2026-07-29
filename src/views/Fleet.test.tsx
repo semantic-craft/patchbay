@@ -759,6 +759,44 @@ describe("Fleet", () => {
     );
   });
 
+  it("finishes the manifest refresh before starting discovery", async () => {
+    let resolveManifest!: (snapshot: FleetManifestSnapshot) => void;
+    const manifestPending = new Promise<FleetManifestSnapshot>((resolve) => {
+      resolveManifest = resolve;
+    });
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "fleet_status":
+          return Promise.resolve(STATUS);
+        case "fleet_auto_status":
+          return Promise.resolve(AUTO_STATUS);
+        case "fleet_manifest_get":
+          return manifestPending;
+        case "fleet_discover":
+          return Promise.resolve({
+            machine: "alpha",
+            projects_root: "/Users/me/Projects",
+            scanned_at: Date.now(),
+            unlisted: [],
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    renderFleet();
+    fireEvent.click(await screen.findByRole("button", { name: "Manage manifest" }));
+
+    await waitFor(() =>
+      expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "fleet_manifest_get")).toHaveLength(1),
+    );
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "fleet_discover")).toHaveLength(0);
+
+    await act(async () => resolveManifest(MANIFEST_SNAPSHOT));
+    expect(await screen.findByText("Manage fleet manifest")).toBeDefined();
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "fleet_discover")).toHaveLength(1);
+  });
+
   it("bootstraps a missing repo through preview and sends the exact plan on confirm", async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       switch (cmd) {
