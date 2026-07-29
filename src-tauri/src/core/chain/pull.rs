@@ -187,14 +187,21 @@ fn apply_one(item: &PullPreview) -> PullResult {
         Ok(head) => head,
         Err(e) => return error_result(item, "scan_error", e.message()),
     };
+    match repo.head_detached() {
+        Ok(true) => return skip_result(item, "detached".to_string()),
+        Ok(false) => {}
+        Err(error) => return error_result(item, "scan_error", error.message()),
+    }
     let Some(local_oid) = head.target() else {
         return skip_result(item, "detached".to_string());
     };
-    let Some(branch) = head.shorthand().map(str::to_string) else {
-        return skip_result(item, "detached".to_string());
+    let branch = match head.shorthand() {
+        Ok(branch) => branch.to_string(),
+        Err(error) => return error_result(item, "scan_error", error.message()),
     };
-    let Some(refname) = head.name().map(str::to_string) else {
-        return error_result(item, "scan_error", "HEAD has no reference name");
+    let refname = match head.name() {
+        Ok(refname) => refname.to_string(),
+        Err(error) => return error_result(item, "scan_error", error.message()),
     };
     let before = short(local_oid);
     drop(head);
@@ -366,7 +373,13 @@ fn fetch_origin(repo: &git2::Repository, branch: &str) -> Result<(), FetchFailur
         reason: classify_fetch_reason(&e),
         message: e.message().to_string(),
     })?;
-    let url = remote.url().unwrap_or_default().to_string();
+    let url = remote
+        .url()
+        .map(str::to_string)
+        .map_err(|error| FetchFailure {
+            reason: classify_fetch_reason(&error),
+            message: error.message().to_string(),
+        })?;
     let refspec = format!("+refs/heads/{branch}:refs/remotes/origin/{branch}");
 
     let mut fetch_opts = git2::FetchOptions::new();
@@ -451,7 +464,7 @@ fn upstream_shorthand(path: &Path) -> Option<String> {
         return None;
     }
     let head = repo.head().ok()?;
-    let name = head.shorthand()?;
+    let name = head.shorthand().ok()?;
     let local = repo.find_branch(name, git2::BranchType::Local).ok()?;
     let upstream = local.upstream().ok()?;
     upstream.name().ok().flatten().map(str::to_string)

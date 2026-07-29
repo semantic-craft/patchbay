@@ -426,7 +426,10 @@ pub(super) fn fast_forward_checkout(
     let head = repo
         .head()
         .map_err(|error| PullCheckoutError::Other(error.message().to_string()))?;
-    if head.shorthand() != Some(branch)
+    let current_branch = head
+        .shorthand()
+        .map_err(|error| PullCheckoutError::Other(error.message().to_string()))?;
+    if current_branch != branch
         || head.target().map(|oid| oid.to_string()).as_deref() != Some(expected_from)
     {
         return Err(PullCheckoutError::Other(

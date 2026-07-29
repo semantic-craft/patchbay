@@ -175,7 +175,7 @@ pub fn list_staging_refs(repo: &Repository) -> Vec<(String, String, Oid)> {
     let mut out = Vec::new();
     if let Ok(refs) = repo.references_glob(&format!("{STAGING_REF_PREFIX}*")) {
         for r in refs.flatten() {
-            let Some(name) = r.name() else { continue };
+            let Ok(name) = r.name() else { continue };
             let Some(rest) = name.strip_prefix(STAGING_REF_PREFIX) else {
                 continue;
             };
@@ -195,7 +195,7 @@ pub fn list_conflict_refs(repo: &Repository) -> Vec<(String, Oid)> {
     let mut out = Vec::new();
     if let Ok(refs) = repo.references_glob(&format!("{CONFLICT_REF_PREFIX}*")) {
         for r in refs.flatten() {
-            let Some(name) = r.name() else { continue };
+            let Ok(name) = r.name() else { continue };
             let Some(skill_id) = name.strip_prefix(CONFLICT_REF_PREFIX) else {
                 continue;
             };
