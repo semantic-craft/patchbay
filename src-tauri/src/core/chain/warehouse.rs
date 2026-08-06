@@ -9,7 +9,17 @@ use super::repo_health::{self, RepoHealth, RepoRemote};
 use crate::core::skill_metadata;
 
 /// Non-hidden directories never descended into (hidden dirs are always skipped).
-const SKIP_DIRS: &[&str] = &["node_modules", "venv", "target", "dist", "build", "out"];
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    "venv",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "examples",
+    "deprecated",
+    "in-progress",
+];
 const MAX_DEPTH: usize = 4;
 
 #[derive(Debug, Clone, Serialize)]
@@ -198,5 +208,41 @@ fn collect_skills(dir: &Path, depth: usize, out: &mut Vec<RepoSkill>) {
             continue;
         }
         collect_skills(&path, depth + 1, out);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn write_skill(path: &Path, name: &str) {
+        fs::create_dir_all(path).unwrap();
+        fs::write(
+            path.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: fixture\n---\n"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn scan_root_excludes_non_publishable_skill_subtrees() {
+        let root = tempdir().unwrap();
+        let repo = root.path().join("source-repo");
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        write_skill(&repo.join("skills/live"), "live");
+        write_skill(&repo.join("examples/demo"), "demo");
+        write_skill(&repo.join("deprecated/old"), "old");
+        write_skill(&repo.join("in-progress/draft"), "draft");
+
+        let scan = scan_root(root.path());
+        let names: Vec<_> = scan.repos[0]
+            .skills
+            .iter()
+            .map(|skill| skill.name.as_str())
+            .collect();
+
+        assert_eq!(names, vec!["live"]);
     }
 }

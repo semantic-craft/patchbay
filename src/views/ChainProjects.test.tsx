@@ -1719,4 +1719,38 @@ describe("ChainProjects", () => {
       }),
     );
   });
+
+  it("refreshes the topology before opening the link dialog", async () => {
+    const staleRepo = repo("source", [
+      { name: "removed-skill", path: "/wh/source/skills/removed-skill" },
+    ]);
+    const freshRepo = repo("source", [
+      { name: "current-skill", path: "/wh/source/skills/current-skill" },
+    ]);
+    let topologyCalls = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "chain_get_topology":
+          topologyCalls += 1;
+          return Promise.resolve({
+            ...TOPO,
+            repos: topologyCalls === 1 ? [staleRepo] : [freshRepo],
+          });
+        case "instructions_scan":
+          return Promise.resolve(INSTRUCTIONS_REPORT);
+        case "chain_doctor_report":
+          return Promise.resolve(doctorReport());
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "＋ Link skills" }));
+
+    const picker = await screen.findByTestId("skill-picker");
+    await waitFor(() => expect(topologyCalls).toBe(2));
+    expect(within(picker).queryByRole("checkbox", { name: "removed-skill" })).toBeNull();
+    expect(within(picker).getByRole("checkbox", { name: "current-skill" })).toBeTruthy();
+  });
 });

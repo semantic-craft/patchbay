@@ -300,6 +300,26 @@ export function ChainProjects() {
     }
   };
 
+  const startLink = async () => {
+    if (!project) return;
+    setLoading(true);
+    try {
+      // The picker is an inventory decision surface, so it must not inherit a
+      // topology snapshot from before an Original was added, removed, or moved.
+      const topology = await getChainTopology();
+      setTopo(topology);
+      const refreshed = topology.projects.find((candidate) => candidate.path === project.path);
+      setLinkTarget({
+        name: refreshed?.name ?? project.name,
+        path: refreshed?.path ?? project.path,
+      });
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // A per-entry surface row carries its Agent key in `location`; the aggregate
   // row (".agents") is the shared surface, so unlinking it targets every Agent.
   const startUnlink = async (name: string, projectPath: string, location: string) => {
@@ -382,7 +402,7 @@ export function ChainProjects() {
         hasProject={project !== null}
         onPickFolder={() => void pickFolder()}
         onRescan={() => void load()}
-        onLink={() => project && setLinkTarget({ name: project.name, path: project.path })}
+        onLink={() => void startLink()}
       />
 
       {error && (
