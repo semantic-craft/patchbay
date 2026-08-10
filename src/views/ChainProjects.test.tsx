@@ -1934,6 +1934,123 @@ describe("ChainProjects", () => {
     expect(mockInvoke).not.toHaveBeenCalledWith("chain_apply_unlink", expect.anything());
   });
 
+  it("refuses a removal that would take a same-named Original it kept", async () => {
+    // Two Originals named `alpha` reach this project: the aggregate resolves
+    // to repo A, a direct per-entry surface to repo B. Unlink is addressed by
+    // name, so dropping one would drop both — the edit is refused instead.
+    const twin: ChainProject = {
+      ...PROJECT,
+      agents_dir: {
+        path: "/proj/.agents/skills",
+        entries: [{ ...ENTRY, entry_path: "/proj/.agents/skills/alpha" }],
+      },
+      surfaces: [
+        {
+          ...PROJECT.surfaces[0],
+          entries: [
+            {
+              ...ENTRY,
+              entry_path: "/proj/.claude/skills/alpha",
+              final_target: "/wh/other/skills/alpha",
+            },
+          ],
+        },
+      ],
+    };
+    const inventory = repo("source", [
+      { name: "alpha", path: "/wh/repo/skills/alpha" },
+      { name: "alpha", path: "/wh/other/skills/alpha" },
+    ]);
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "chain_get_topology":
+          return Promise.resolve({ ...TOPO, projects: [twin], repos: [inventory] });
+        case "instructions_scan":
+          return Promise.resolve(INSTRUCTIONS_REPORT);
+        case "chain_doctor_report":
+          return Promise.resolve(doctorReport());
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
+    const picker = await screen.findByTestId("skill-picker");
+    // Both are checked; unchecking only the first leaves the name ambiguous.
+    const boxes = within(picker).getAllByRole("checkbox", { name: "alpha" });
+    fireEvent.click(boxes[0]);
+
+    expect(await screen.findByTestId("ambiguous-removal")).toBeTruthy();
+    expect((screen.getByTestId("link-preview") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId("link-preview"));
+    expect(mockInvoke).not.toHaveBeenCalledWith("chain_plan_unlink", expect.anything());
+  });
+
+  it("counts a suggested agent as new when the project has no surfaces", async () => {
+    // A project with a populated aggregate but no Agent surfaces: the pills
+    // are a suggestion, not a baseline, so accepting them is a real change.
+    const aggregateOnly: ChainProject = {
+      ...PROJECT,
+      agents_dir: {
+        path: "/proj/.agents/skills",
+        entries: [{ ...ENTRY, entry_path: "/proj/.agents/skills/alpha" }],
+      },
+      surfaces: [],
+    };
+    const inventory = repo("source", [{ name: "alpha", path: "/wh/repo/skills/alpha" }]);
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "chain_get_topology":
+          return Promise.resolve({ ...TOPO, projects: [aggregateOnly], repos: [inventory] });
+        case "instructions_scan":
+          return Promise.resolve(INSTRUCTIONS_REPORT);
+        case "chain_doctor_report":
+          return Promise.resolve(doctorReport());
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
+    await screen.findByTestId("skill-picker");
+    // Preview is available with the Skill set untouched: the surfaces are the
+    // change, and the plan carries the existing whitelist onto them.
+    expect((screen.getByTestId("link-preview") as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByTestId("link-preview"));
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("chain_plan_link", {
+        projectPath: "/proj",
+        skillPaths: ["/wh/repo/skills/alpha"],
+        agents: ["claude", "codex"],
+      }),
+    );
+  });
+
+  it("does not open the editor on a stale inventory when the rescan fails", async () => {
+    // reload() swallows its own failure so the shell keeps rendering; the
+    // editor must read its verdict rather than the absence of a throw.
+    let calls = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "chain_get_topology") {
+        calls += 1;
+        return calls === 1
+          ? Promise.resolve(TOPO)
+          : Promise.reject(new Error("scan exploded"));
+      }
+      if (cmd === "instructions_scan") return Promise.resolve(INSTRUCTIONS_REPORT);
+      if (cmd === "chain_doctor_report") return Promise.resolve(doctorReport());
+      return Promise.resolve(undefined);
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
+    await waitFor(() => expect(calls).toBeGreaterThanOrEqual(2));
+    expect(screen.queryByTestId("skill-picker")).toBeNull();
+  });
+
   it("refreshes the topology before opening the link dialog", async () => {
     const staleRepo = repo("source", [
       { name: "removed-skill", path: "/wh/source/skills/removed-skill" },

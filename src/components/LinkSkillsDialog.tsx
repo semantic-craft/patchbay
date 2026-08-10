@@ -79,17 +79,30 @@ function linkedPaths(project: ChainProject | null): Set<string> {
   return paths;
 }
 
-/** The Agents this project already exposes Skills through — the honest default
- * for an edit, instead of a hardcoded pair that silently skips the rest. Only
- * agents the picker can actually target are kept: a surface outside
- * CHAIN_AGENTS must not ride invisibly into a link plan. */
-function currentAgents(project: ChainProject | null): Set<string> {
+/**
+ * The Agent surfaces the topology actually observes for this project — the
+ * baseline an edit is a diff against. Only agents the picker can target are
+ * kept: a surface outside CHAIN_AGENTS must not ride invisibly into a plan.
+ *
+ * This is deliberately not defaulted. A project with a populated
+ * `.agents/skills` but no surfaces has an EMPTY baseline, so enabling an agent
+ * counts as the change it is; folding a default in here would mark those
+ * agents as already present and make that edit impossible to express.
+ */
+function observedAgents(project: ChainProject | null): Set<string> {
   const known = new Set<string>(CHAIN_AGENTS);
   const agents = new Set<string>();
   for (const surface of project?.surfaces ?? []) {
     if (surface.kind !== "absent" && known.has(surface.agent)) agents.add(surface.agent);
   }
-  return agents.size > 0 ? agents : new Set(["claude", "codex"]);
+  return agents;
+}
+
+/** What the editor opens with: the observed surfaces, or — when there are none
+ * — a suggestion the user can accept or change. A suggestion is not a baseline. */
+function initialAgents(project: ChainProject | null): Set<string> {
+  const observed = observedAgents(project);
+  return observed.size > 0 ? observed : new Set(["claude", "codex"]);
 }
 
 interface Preview {
@@ -114,7 +127,7 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
   // than syncing state in an effect — and a background rescan can never wipe
   // edits in progress.
   const [selected, setSelected] = useState<Set<string>>(linked);
-  const [agents, setAgents] = useState<Set<string>>(() => currentAgents(project));
+  const [agents, setAgents] = useState<Set<string>>(() => initialAgents(project));
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [applied, setApplied] = useState<{
@@ -132,21 +145,37 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
   // not have yet is a change even with the Skill set untouched. Disabling a
   // baseline agent is not — linking only ever creates, so an unchecked pill
   // just scopes which surfaces receive NEW Skills, exactly as before.
-  const newAgents = useMemo(
-    () => [...agents].filter((agent) => !currentAgents(project).has(agent)),
-    [agents, project],
-  );
-  // Removals are named by Skill, because that is what unlink takes; only
-  // Originals still present in the inventory can be identified this way.
-  const removed = useMemo(() => {
+  const newAgents = useMemo(() => {
+    const observed = observedAgents(project);
+    return [...agents].filter((agent) => !observed.has(agent));
+  }, [agents, project]);
+  // Removals are addressed by Skill NAME, because that is what unlink takes —
+  // and a name is not always one Original. When a project exposes two
+  // same-named Originals (an aggregate `foo` from one repo, a direct `foo`
+  // from another), unlinking by that name would take both, including the one
+  // still checked. That edit cannot be expressed through the name-addressed
+  // API, so it is refused here rather than silently over-removing: this path
+  // has no link half, so the apply-time abort guard would never see it.
+  const { removed, ambiguous } = useMemo(() => {
     const byPath = new Map<string, string>();
     for (const repo of repos) {
       for (const skill of repo.skills) byPath.set(skill.path, skill.name);
     }
-    return [...linked]
-      .filter((path) => !selected.has(path))
-      .map((path) => byPath.get(path))
-      .filter((name): name is string => Boolean(name));
+    const keptNames = new Set(
+      [...selected]
+        .map((path) => byPath.get(path))
+        .filter((name): name is string => Boolean(name)),
+    );
+    const removed = new Set<string>();
+    const ambiguous = new Set<string>();
+    for (const path of linked) {
+      if (selected.has(path)) continue;
+      const name = byPath.get(path);
+      if (!name) continue;
+      if (keptNames.has(name)) ambiguous.add(name);
+      else removed.add(name);
+    }
+    return { removed: [...removed], ambiguous: [...ambiguous] };
   }, [selected, linked, repos]);
 
   const changeCount = added.length + removed.length + newAgents.length;
@@ -168,7 +197,7 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
 
   // Step 1 → 2: a read-only preview of the whole change set, both directions.
   const buildPreview = async () => {
-    if (changeCount === 0) return;
+    if (changeCount === 0 || ambiguous.length > 0) return;
     setLoading(true);
     try {
       // A new agent surface needs the WHOLE selection, not just the additions —
@@ -281,6 +310,15 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
               presets={presets}
             />
 
+            {ambiguous.length > 0 && (
+              <p
+                data-testid="ambiguous-removal"
+                className="mt-3 text-[12px] text-amber-400"
+              >
+                {t("chain.ambiguousRemoval", { names: ambiguous.join(", ") })}
+              </p>
+            )}
+
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={handleClose} className="app-button-secondary">
                 {t("common.cancel")}
@@ -288,7 +326,9 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
               <button
                 data-testid="link-preview"
                 onClick={() => void buildPreview()}
-                disabled={loading || changeCount === 0 || agents.size === 0}
+                disabled={
+                  loading || changeCount === 0 || agents.size === 0 || ambiguous.length > 0
+                }
                 className="app-button-primary"
               >
                 {loading ? t("chain.planning") : t("chain.previewPlan")}

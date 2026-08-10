@@ -95,7 +95,7 @@ export function ChainProjects() {
   // the previous one no longer apply.
   const load = useCallback(async () => {
     setItemized(new Set());
-    await reload();
+    return reload();
   }, [reload]);
 
   useEffect(() => {
@@ -244,8 +244,14 @@ export function ChainProjects() {
       // project and persists it, so it joins the topology and survives rescans
       // and restarts. Then open the link dialog to manage its skills.
       const registered = await chainRegisterProject(picked);
-      await load();
+      const scanned = await load();
       selectProject(registered.path);
+      // The project is enrolled either way, but a stale topology does not
+      // contain it — opening the editor on it would render nothing at all.
+      if (!scanned) {
+        toast.error(t("chain.refreshFailed"));
+        return;
+      }
       setLinkTarget(registered.path);
     } catch (e) {
       toast.error(String(e));
@@ -256,10 +262,13 @@ export function ChainProjects() {
     if (!project) return;
     try {
       // The picker is an inventory decision surface, so it must not inherit a
-      // snapshot from before an Original was added, removed, or moved. The
-      // target is held by path and re-resolved at render, so it always shows
-      // whatever the refreshed scan says.
-      await load();
+      // snapshot from before an Original was added, removed, or moved. `reload`
+      // swallows its own failure to keep the shell rendering, so its verdict —
+      // not the absence of a throw — is what gates opening the editor.
+      if (!(await load())) {
+        toast.error(t("chain.refreshFailed"));
+        return;
+      }
       setLinkTarget(project.path);
     } catch (e) {
       toast.error(String(e));
@@ -489,7 +498,9 @@ export function ChainProjects() {
         projectPath={instructionsTarget?.path ?? ""}
         plan={instructionsTarget?.plan ?? null}
         onClose={() => setInstructionsTarget(null)}
-        onApplied={load}
+        onApplied={async () => {
+          await load();
+        }}
       />
     </div>
   );
