@@ -1,6 +1,7 @@
-//! Credential handling for the git backup remote.
+//! Credential handling for Git remotes Patchbay talks to (source repos, the
+//! fleet hub).
 //!
-//! Policy (backup redesign §3.7): tokens must never live in URLs on disk
+//! Policy: tokens must never live in URLs on disk
 //! (`.git/config`, SQLite settings). Credentials embedded in a remote URL are
 //! extracted into the OS keychain and injected into git at call time through
 //! a static askpass script that only echoes environment variables.
@@ -9,7 +10,7 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-use super::{central_repo, github_api};
+use super::app_dirs;
 
 const KEYRING_SERVICE: &str = "patchbay-git-backup";
 
@@ -19,98 +20,11 @@ const ENV_USERNAME: &str = "PATCHBAY_ASKPASS_USERNAME";
 const ENV_PASSWORD: &str = "PATCHBAY_ASKPASS_PASSWORD";
 
 static PROXY_URL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-static REFRESH_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RemoteCredential {
     pub username: String,
     pub password: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub github_app: Option<GithubAppCredential>,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct GithubAppCredential {
-    pub refresh_token: String,
-    pub access_token_expires_at: i64,
-    pub refresh_token_expires_at: i64,
-    #[serde(default)]
-    pub repository_id: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum RefreshDecision {
-    NotNeeded,
-    Refresh,
-    Reauthorize,
-}
-
-fn refresh_decision(credential: &RemoteCredential, now: i64) -> RefreshDecision {
-    let Some(github_app) = &credential.github_app else {
-        return RefreshDecision::NotNeeded;
-    };
-    if now >= github_app.refresh_token_expires_at {
-        RefreshDecision::Reauthorize
-    } else if now >= github_app.access_token_expires_at.saturating_sub(300) {
-        RefreshDecision::Refresh
-    } else {
-        RefreshDecision::NotNeeded
-    }
-}
-
-fn apply_github_app_token(
-    credential: &mut RemoteCredential,
-    token: github_api::GithubAppToken,
-    now: i64,
-    repository_id: u64,
-) {
-    let expires_at = |seconds: u64| now.saturating_add(seconds.min(i64::MAX as u64) as i64);
-    credential.username = "x-access-token".to_string();
-    credential.password = token.access_token;
-    credential.github_app = Some(GithubAppCredential {
-        refresh_token: token.refresh_token,
-        access_token_expires_at: expires_at(token.expires_in),
-        refresh_token_expires_at: expires_at(token.refresh_token_expires_in),
-        repository_id,
-    });
-}
-
-pub fn github_app_credential(
-    token: github_api::GithubAppToken,
-    repository_id: u64,
-) -> RemoteCredential {
-    let mut credential = RemoteCredential {
-        username: "x-access-token".to_string(),
-        password: String::new(),
-        github_app: None,
-    };
-    apply_github_app_token(
-        &mut credential,
-        token,
-        chrono::Utc::now().timestamp(),
-        repository_id,
-    );
-    credential
-}
-
-fn validate_github_app_scope_with<F>(credential: &RemoteCredential, validate: F) -> Result<()>
-where
-    F: FnOnce(&str, u64) -> Result<()>,
-{
-    let Some(github_app) = &credential.github_app else {
-        return Ok(());
-    };
-    validate(&credential.password, github_app.repository_id)
-}
-
-fn validate_github_app_scope(credential: &RemoteCredential) -> Result<()> {
-    validate_github_app_scope_with(credential, |token, repository_id| {
-        github_api::validate_github_app_credential_scope(
-            token,
-            repository_id,
-            proxy_url().as_deref(),
-        )
-    })
 }
 
 pub fn set_proxy(proxy_url: Option<String>) {
@@ -118,14 +32,6 @@ pub fn set_proxy(proxy_url: Option<String>) {
         .get_or_init(|| Mutex::new(None))
         .lock()
         .unwrap_or_else(|error| error.into_inner()) = proxy_url.filter(|url| !url.is_empty());
-}
-
-fn proxy_url() -> Option<String> {
-    PROXY_URL
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .clone()
 }
 
 /// Split userinfo credentials out of an http(s) URL.
@@ -169,7 +75,6 @@ pub fn split_credentials_from_url(url: &str) -> Option<(RemoteCredential, String
         RemoteCredential {
             username: decode(raw_user),
             password: decode(raw_pass),
-            github_app: None,
         },
         sanitized,
     ))
@@ -223,55 +128,7 @@ fn load_stored_credential(host: &str) -> Result<Option<RemoteCredential>> {
 }
 
 pub fn load_credential(host: &str) -> Result<Option<RemoteCredential>> {
-    let Some(credential) = load_stored_credential(host)? else {
-        return Ok(None);
-    };
-    let now = chrono::Utc::now().timestamp();
-    match refresh_decision(&credential, now) {
-        RefreshDecision::NotNeeded => {
-            validate_github_app_scope(&credential)?;
-            Ok(Some(credential))
-        }
-        RefreshDecision::Reauthorize => {
-            anyhow::bail!("GITHUB_APP_REAUTH_REQUIRED: the Patchbay GitHub authorization expired")
-        }
-        RefreshDecision::Refresh => {
-            let _guard = REFRESH_LOCK
-                .get_or_init(|| Mutex::new(()))
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            let Some(mut current) = load_stored_credential(host)? else {
-                return Ok(None);
-            };
-            match refresh_decision(&current, chrono::Utc::now().timestamp()) {
-                RefreshDecision::NotNeeded => {
-                    validate_github_app_scope(&current)?;
-                    return Ok(Some(current));
-                }
-                RefreshDecision::Reauthorize => anyhow::bail!(
-                    "GITHUB_APP_REAUTH_REQUIRED: the Patchbay GitHub authorization expired"
-                ),
-                RefreshDecision::Refresh => {}
-            }
-            let github_app = current
-                .github_app
-                .as_ref()
-                .context("GitHub App refresh metadata is missing")?;
-            let refresh_token = github_app.refresh_token.clone();
-            let repository_id = github_app.repository_id;
-            let token =
-                github_api::refresh_github_app_token(&refresh_token, proxy_url().as_deref())?;
-            apply_github_app_token(
-                &mut current,
-                token,
-                chrono::Utc::now().timestamp(),
-                repository_id,
-            );
-            validate_github_app_scope(&current)?;
-            store_credential(host, &current)?;
-            Ok(Some(current))
-        }
-    }
+    load_stored_credential(host)
 }
 
 pub fn delete_credential(host: &str) -> Result<()> {
@@ -296,7 +153,7 @@ case \"$1\" in\n\
 esac\n";
 
 fn askpass_script_path() -> PathBuf {
-    central_repo::base_dir().join("git-askpass.sh")
+    app_dirs::base_dir().join("git-askpass.sh")
 }
 
 fn ensure_askpass_script() -> Result<PathBuf> {
@@ -432,130 +289,5 @@ mod tests {
         assert!(ASKPASS_SCRIPT.contains(ENV_PASSWORD));
         // No secrets baked into the script itself.
         assert!(!ASKPASS_SCRIPT.contains("token"));
-    }
-
-    #[test]
-    fn legacy_pat_credential_stays_backward_compatible() {
-        let credential: RemoteCredential =
-            serde_json::from_str(r#"{"username":"alice","password":"ghp_existing"}"#).unwrap();
-
-        assert_eq!(credential.username, "alice");
-        assert_eq!(credential.password, "ghp_existing");
-        assert_eq!(credential.github_app, None);
-        assert_eq!(
-            refresh_decision(&credential, 1_000),
-            RefreshDecision::NotNeeded
-        );
-    }
-
-    #[test]
-    fn github_app_credential_refreshes_before_access_token_expiry() {
-        let credential = RemoteCredential {
-            username: "x-access-token".to_string(),
-            password: "ghu_access".to_string(),
-            github_app: Some(GithubAppCredential {
-                refresh_token: "ghr_refresh".to_string(),
-                access_token_expires_at: 2_000,
-                refresh_token_expires_at: 5_000,
-                repository_id: 42,
-            }),
-        };
-
-        assert_eq!(
-            refresh_decision(&credential, 1_699),
-            RefreshDecision::NotNeeded
-        );
-        assert_eq!(
-            refresh_decision(&credential, 1_700),
-            RefreshDecision::Refresh
-        );
-        assert_eq!(
-            refresh_decision(&credential, 5_000),
-            RefreshDecision::Reauthorize
-        );
-    }
-
-    #[test]
-    fn refreshed_github_app_credential_rotates_both_tokens() {
-        let mut credential = RemoteCredential {
-            username: "x-access-token".to_string(),
-            password: "ghu_old".to_string(),
-            github_app: Some(GithubAppCredential {
-                refresh_token: "ghr_old".to_string(),
-                access_token_expires_at: 2_000,
-                refresh_token_expires_at: 5_000,
-                repository_id: 42,
-            }),
-        };
-        apply_github_app_token(
-            &mut credential,
-            crate::core::github_api::GithubAppToken {
-                access_token: "ghu_new".to_string(),
-                expires_in: 28_800,
-                refresh_token: "ghr_new".to_string(),
-                refresh_token_expires_in: 15_897_600,
-            },
-            10_000,
-            42,
-        );
-
-        assert_eq!(credential.password, "ghu_new");
-        assert_eq!(
-            credential.github_app,
-            Some(GithubAppCredential {
-                refresh_token: "ghr_new".to_string(),
-                access_token_expires_at: 38_800,
-                refresh_token_expires_at: 15_907_600,
-                repository_id: 42,
-            }),
-        );
-    }
-
-    #[test]
-    fn github_app_credential_remembers_repository_scope() {
-        let credential = github_app_credential(
-            crate::core::github_api::GithubAppToken {
-                access_token: "ghu_access".to_string(),
-                expires_in: 28_800,
-                refresh_token: "ghr_refresh".to_string(),
-                refresh_token_expires_in: 15_897_600,
-            },
-            42,
-        );
-
-        assert_eq!(credential.github_app.unwrap().repository_id, 42);
-    }
-
-    #[test]
-    fn github_app_scope_revalidation_error_reaches_git() {
-        let credential = RemoteCredential {
-            username: "x-access-token".to_string(),
-            password: "ghu_access".to_string(),
-            github_app: Some(GithubAppCredential {
-                refresh_token: "ghr_refresh".to_string(),
-                access_token_expires_at: i64::MAX,
-                refresh_token_expires_at: i64::MAX,
-                repository_id: 42,
-            }),
-        };
-        let error = validate_github_app_scope_with(&credential, |_, _| {
-            anyhow::bail!("GITHUB_APP_INSTALLATION_SCOPE: installation expanded")
-        })
-        .expect_err("repository boundary changes must stop git authentication");
-        assert!(error.to_string().contains("GITHUB_APP_INSTALLATION_SCOPE"));
-    }
-
-    #[test]
-    fn expired_github_app_error_reaches_system_git_credentials() {
-        let error = credential_env_for_url_with(
-            "https://expired-system-git.patchbay.test/owner/repo.git",
-            |_| {
-                anyhow::bail!(
-                    "GITHUB_APP_REAUTH_REQUIRED: the Patchbay GitHub authorization expired"
-                )
-            },
-        )
-        .expect_err("expired app authorization must not become empty credentials");
-        assert!(error.to_string().contains("GITHUB_APP_REAUTH_REQUIRED"));
     }
 }

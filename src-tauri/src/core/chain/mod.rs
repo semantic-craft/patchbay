@@ -1,7 +1,7 @@
 //! Three-tier skill link topology (xw fork module).
 //!
 //! Models the machine's skill-management convention:
-//! tier 1: Patchbay's managed central library plus optional Git checkouts,
+//! tier 1: Git checkouts discovered under the configured source roots,
 //! tier 2: per-project aggregate dir `.agents/skills/<name>` symlinking to originals,
 //! tier 3: per-agent entry links `.claude/skills` -> `.agents/skills` (and codex etc).
 //!
@@ -155,8 +155,8 @@ pub struct ChainTopology {
     pub scanned_at: i64,
 }
 
-/// Build the full topology from tier-1 sources (the managed central library plus
-/// optional Original Repository roots) and the
+/// Build the full topology from tier-1 sources (the Git checkouts under the
+/// configured Original Repository roots) and the
 /// registered project inventory (tiers 2/3). `projects_root` is retained only as
 /// a display hint for shortening paths in the UI; the project inventory comes
 /// from `project_paths`, not from re-reading that root. `adapters` supplies the
@@ -164,7 +164,6 @@ pub struct ChainTopology {
 /// surface.
 pub fn build_topology(
     warehouse_roots: &[PathBuf],
-    managed_root: &Path,
     projects_root: &Path,
     project_paths: &[PathBuf],
     adapters: &[ToolAdapter],
@@ -184,15 +183,12 @@ pub fn build_topology(
         });
         repos.extend(scan.repos);
     }
-    repos.push(warehouse::scan_managed_root(managed_root));
 
     // Stable order across roots; break name ties by path so same-named repos in
     // different roots stay deterministic.
     repos.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.path.cmp(&b.path)));
 
-    let mut source_roots = deduped.clone();
-    source_roots.push(managed_root.to_path_buf());
-    let source_roots = roots::dedupe(&source_roots);
+    let source_roots = deduped.clone();
     let projects = project_links::discover(project_paths, &source_roots, &repos);
     for repo in repos.iter_mut() {
         // Reverse references key on the repository's canonical path, not its
@@ -422,21 +418,13 @@ mod guard_tests {
         let temp = tempdir().unwrap();
         let warehouse = temp.path().join("warehouse");
         let projects = temp.path().join("projects");
-        let managed = temp.path().join("central");
         fs::create_dir_all(&warehouse).unwrap();
         fs::create_dir_all(&projects).unwrap();
-        fs::create_dir_all(&managed).unwrap();
         let surface = temp.path().join("skills");
         make_skill(&surface.join("leaked"), "leaked");
         let adapter = adapter_pinned_to("claude_code", &surface);
 
-        let topo = build_topology(
-            std::slice::from_ref(&warehouse),
-            &managed,
-            &projects,
-            &[],
-            &[adapter],
-        );
+        let topo = build_topology(std::slice::from_ref(&warehouse), &projects, &[], &[adapter]);
         let guarded = only_surface(topo.guard);
         assert_eq!(guarded.state, "violation");
         assert_eq!(guarded.violations[0].skill, "leaked");

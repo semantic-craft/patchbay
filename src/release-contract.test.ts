@@ -52,13 +52,11 @@ describe("Patchbay release contract", () => {
     expect(existsSync(resolve(process.cwd(), "src-tauri/src/bin/patchbay-cli.rs"))).toBe(true);
   });
 
-  it("uses Patchbay for current storage, backup, and operator-facing documentation", () => {
-    const backupView = read("src/views/Backup.tsx");
+  it("uses Patchbay for current storage and operator-facing documentation", () => {
     const readme = read("README.md");
     const zhReadme = read("README.zh-CN.md");
     const manageSkills = read("skills/manage-skills/SKILL.md");
 
-    expect(backupView).toContain('const DEFAULT_GITHUB_REPO = "patchbay-backup"');
     for (const locale of [en, zh, zhTW]) {
       expect(locale.settings.repoWarning_config_unreadable).toContain("~/.patchbay");
       expect(locale.settings.repoWarning_repo_path_invalid).toContain("~/.patchbay");
@@ -67,26 +65,6 @@ describe("Patchbay release contract", () => {
       expect(doc).toContain("~/.patchbay");
       expect(doc).toContain("patchbay-cli");
     }
-  });
-
-  it("uses an independently configured, repository-scoped Patchbay GitHub App", () => {
-    const githubApi = read("src-tauri/src/core/github_api.rs");
-    const backupView = read("src/views/Backup.tsx");
-    const releaseWorkflow = read(".github/workflows/release.yml");
-
-    expect(githubApi).toContain('option_env!("PATCHBAY_GITHUB_APP_CLIENT_ID")');
-    expect(githubApi).not.toContain("Ov23li4a3SMdhIiKo7IE");
-    expect(githubApi).toContain("connect_github_app_backup_repo");
-    expect(githubApi).toContain("GITHUB_APP_REPO_ACCESS");
-    expect(githubApi).toContain("GITHUB_APP_REPO_NOT_PRIVATE");
-    expect(githubApi).toContain("GITHUB_APP_INSTALLATION_SCOPE");
-    expect(githubApi).toContain('"repository_id".to_string()');
-    expect(backupView).toContain("handleDeviceFlow");
-    expect(backupView).toContain('poll.status === "repository_identified"');
-    expect(backupView).toContain("https://github.com/apps/patchbay-backup/installations/new");
-    expect(releaseWorkflow).toContain(
-      "PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}",
-    );
   });
 
   it("builds signed updater artifacts for macOS from the base config", () => {

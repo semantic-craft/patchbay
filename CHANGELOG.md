@@ -5,6 +5,22 @@ All notable changes to Patchbay since its first independent release are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Release Overview
+- Patchbay is now only the three-tier chain tool. The central skill library and everything built on it — the marketplace with its leaderboards, the local/Git install paths, GitHub backup and multi-device sync, presets applied to global agent surfaces, and the per-agent workspaces — have been removed. Skills live in the user's own Git repositories; Patchbay wires them into a project and keeps global surfaces empty.
+
+### User-facing
+- **One main screen.** The sidebar is the project list plus Fleet and Settings. Chain, Doctor, and Sources are sections of the main screen instead of separate destinations; navigation drops from nine entries to the project list plus two.
+- **Removed: Library, Install, Backup, the agent and global workspaces, and the project detail page.** The tray menu is now Open Patchbay / Quit.
+- **Chain sources are Git checkouts only.** "Patchbay Central" is no longer a tier-1 source, and the central-library path setting is gone.
+
+### Developer & Governance
+- Deleted the marketplace, installer, sync-engine, backup, auto-backup, scenario, agent-workspace, and preset modules along with their commands; the Tauri command surface drops from 163 to 80.
+- `patchbay-cli` keeps `chain`, `instructions`, `fleet`, and `tools`, gains `status` (data directory and database path), and drops `repo`, `skills`, `presets`, `git`, and the `--skills-root` flag.
+- `core::central_repo` is now `core::app_dirs` and resolves only application state (`~/.patchbay`); `git_credentials` keeps keychain-backed remote credentials without the GitHub App flow.
+- Net −39k lines. Rust and frontend suites stay green (619 + 114 tests).
+
 ## [1.32.1] - 2026-07-29
 
 ### Release Overview

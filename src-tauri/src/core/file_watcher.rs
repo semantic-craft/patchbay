@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::Emitter;
 
-use super::{central_repo, skill_store::SkillStore, tool_adapters};
+use super::{skill_store::SkillStore, tool_adapters};
 
 const APP_FS_CHANGED_EVENT: &str = "app-files-changed";
 const WATCH_RESCAN_INTERVAL: Duration = Duration::from_secs(3);
@@ -152,7 +152,7 @@ fn self_write_muted() -> bool {
 }
 
 fn collect_watch_paths(store: &SkillStore) -> Vec<PathBuf> {
-    let mut paths = vec![central_repo::skills_dir(), central_repo::scenarios_dir()];
+    let mut paths = Vec::new();
 
     for adapter in tool_adapters::all_tool_adapters(store) {
         paths.push(adapter.skills_dir());
@@ -272,17 +272,6 @@ fn is_in_git_dir(path: &Path) -> bool {
         .any(|c| c.as_os_str() == std::ffi::OsStr::new(".git"))
 }
 
-/// Whether the event touches the central repository's working tree (the part
-/// auto-backup cares about). `.git` internals don't count — commits, fetches
-/// and pushes must not re-arm the auto-backup debounce.
-fn touches_central_repo(event: &Event) -> bool {
-    let skills_dir = central_repo::skills_dir();
-    event
-        .paths
-        .iter()
-        .any(|p| p.starts_with(&skills_dir) && !is_in_git_dir(p))
-}
-
 pub fn start_file_watcher<R: tauri::Runtime>(app: tauri::AppHandle<R>, store: Arc<SkillStore>) {
     std::thread::spawn(move || {
         let (tx, rx) = std::sync::mpsc::channel();
@@ -340,9 +329,6 @@ pub fn start_file_watcher<R: tauri::Runtime>(app: tauri::AppHandle<R>, store: Ar
 
             match rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(Ok(event)) => {
-                    if touches_central_repo(&event) {
-                        super::auto_backup::notify_central_change();
-                    }
                     match decide_emit(
                         should_emit(&event),
                         classify_event_paths(&event.paths),

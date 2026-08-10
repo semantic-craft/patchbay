@@ -1,7 +1,7 @@
 //! Opt-in P2 fleet automatic rounds.
 
+use crate::core::app_dirs;
 use crate::core::audit_log::AuditDraft;
-use crate::core::central_repo;
 use crate::core::error::AppError;
 use crate::core::fleet::manifest;
 use crate::core::fleet::service::{FleetLock, FleetService};
@@ -123,7 +123,7 @@ pub fn run_due_round_at(store: &SkillStore, now_ms: i64) -> Result<AutoRoundTick
     if !is_enabled(store) {
         return Ok(AutoRoundTick::Idle("disabled"));
     }
-    let manifest_path = central_repo::base_dir().join("fleet/meta/manifest.toml");
+    let manifest_path = app_dirs::base_dir().join("fleet/meta/manifest.toml");
     let text = match std::fs::read_to_string(&manifest_path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -394,7 +394,7 @@ mod tests {
     use super::*;
     use crate::core::fleet::meta_repo::MetaRepo;
     use crate::core::fleet::service::{MACHINE_ID_KEY, META_URL_KEY, PROJECTS_ROOT_KEY};
-    use crate::core::{central_repo, skill_store::SkillStore};
+    use crate::core::{app_dirs, skill_store::SkillStore};
     use std::path::Path;
     use std::process::Command;
     use tempfile::tempdir;
@@ -443,15 +443,15 @@ mod tests {
 
     impl Drop for Fixture {
         fn drop(&mut self) {
-            central_repo::set_test_base_dir_override(None);
+            app_dirs::set_test_base_dir_override(None);
         }
     }
 
     fn fixture(authority: &str) -> Fixture {
-        let guard = central_repo::test_base_dir_lock();
+        let guard = app_dirs::test_base_dir_lock();
         let temp = tempdir().unwrap();
         let base = temp.path().join("appdata");
-        central_repo::set_test_base_dir_override(Some(base.clone()));
+        app_dirs::set_test_base_dir_override(Some(base.clone()));
 
         let projects = temp.path().join("projects");
         let alpha = projects.join("alpha");
@@ -552,10 +552,10 @@ auto_sync = true
 
     #[test]
     fn global_default_off_has_zero_network_git_lock_state_or_audit() {
-        let _guard = central_repo::test_base_dir_lock();
+        let _guard = app_dirs::test_base_dir_lock();
         let temp = tempdir().unwrap();
         let base = temp.path().join("appdata");
-        central_repo::set_test_base_dir_override(Some(base.clone()));
+        app_dirs::set_test_base_dir_override(Some(base.clone()));
         let store = SkillStore::new(&temp.path().join("patchbay.db")).unwrap();
 
         let tick = run_due_round_at(&store, 1_000_000).unwrap();
@@ -565,15 +565,15 @@ auto_sync = true
         assert_eq!(store.get_setting(AUTO_STATE_KEY).unwrap(), None);
         assert!(!base.join("fleet.lock").exists());
         assert!(!base.join("fleet/meta").exists());
-        central_repo::set_test_base_dir_override(None);
+        app_dirs::set_test_base_dir_override(None);
     }
 
     #[test]
     fn global_on_without_repo_opt_in_still_has_zero_actions() {
-        let _guard = central_repo::test_base_dir_lock();
+        let _guard = app_dirs::test_base_dir_lock();
         let temp = tempdir().unwrap();
         let base = temp.path().join("appdata");
-        central_repo::set_test_base_dir_override(Some(base.clone()));
+        app_dirs::set_test_base_dir_override(Some(base.clone()));
         let store = SkillStore::new(&temp.path().join("patchbay.db")).unwrap();
         store.set_setting(AUTO_MODE_KEY, "on").unwrap();
         let cache = base.join("fleet/meta");
@@ -599,7 +599,7 @@ branch = "main"
         assert!(store.list_audit(None).unwrap().is_empty());
         assert_eq!(store.get_setting(AUTO_STATE_KEY).unwrap(), None);
         assert!(!base.join("fleet.lock").exists());
-        central_repo::set_test_base_dir_override(None);
+        app_dirs::set_test_base_dir_override(None);
     }
 
     #[test]
