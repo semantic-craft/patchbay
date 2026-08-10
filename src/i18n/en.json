@@ -525,7 +525,8 @@
     "willUnlink": "will unlink",
     "changeSummary": "+{{added}} · −{{removed}}",
     "resultRemoved": "Links to remove",
-    "unlinkSharedNotice": "Includes a shared aggregate entry — every Agent loses the Skill."
+    "unlinkSharedNotice": "Includes a shared aggregate entry — every Agent loses the Skill.",
+    "guardUnknown": "Global surfaces unverified — waiting for a scan"
   },
   "instructions": {
     "panelTitle": "Instructions",

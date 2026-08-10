@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import { RefreshCw, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { cn } from "../utils";
 import { useChain } from "../context/ChainContext";
 import { relativeScanTime, SCAN_STALE_MS } from "../lib/chainUi";
@@ -16,10 +16,16 @@ import { RemediateDialog } from "./RemediateDialog";
  * stay empty — so a violation cannot be something you have to navigate to. It
  * is loud here and nowhere else; when the surfaces are clean it collapses to a
  * single quiet word so the green case costs no attention.
+ *
+ * "Clean" is a verdict, never a default: before the first topology lands — or
+ * when the scan failed outright — the guard says so instead of pretending the
+ * surfaces were checked. A failed RESCAN keeps the previous topology, so the
+ * bar then shows the last real verdict plus the error and, in time, the stale
+ * badge — a marked stale observation beats "unknown".
  */
 export function ChainStatusBar() {
   const { t } = useTranslation();
-  const { topo, loading, reload } = useChain();
+  const { topo, loading, error, reload } = useChain();
   const [now, setNow] = useState(() => Date.now());
   const [remediate, setRemediate] = useState<{
     violation: ChainGuardViolation;
@@ -33,7 +39,8 @@ export function ChainStatusBar() {
   }, []);
 
   const breached = topo?.guard.filter((surface) => surface.state === "violation") ?? [];
-  const clean = breached.length === 0;
+  const guardState: "unknown" | "clean" | "violation" =
+    topo === null ? "unknown" : breached.length > 0 ? "violation" : "clean";
   const scannedAt = topo?.scanned_at;
   const relative = scannedAt ? relativeScanTime(scannedAt, now) : null;
   const stale = !loading && scannedAt !== undefined && now - scannedAt > SCAN_STALE_MS;
@@ -42,15 +49,20 @@ export function ChainStatusBar() {
     <>
       <div
         data-testid="chain-status-bar"
-        data-guard={clean ? "clean" : "violation"}
+        data-guard={guardState}
         className={cn(
           "flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3.5 py-2 text-[12.5px]",
-          clean
-            ? "border-glass-hairline bg-glass-soft"
-            : "border-red-500/30 bg-red-500/[0.07]",
+          guardState === "violation"
+            ? "border-red-500/30 bg-red-500/[0.07]"
+            : "border-glass-hairline bg-glass-soft",
         )}
       >
-        {clean ? (
+        {guardState === "unknown" ? (
+          <span className="flex items-center gap-1.5 text-faint">
+            <ShieldQuestion className="h-3.5 w-3.5" />
+            {t("chain.guardUnknown")}
+          </span>
+        ) : guardState === "clean" ? (
           <span className="flex items-center gap-1.5 text-muted">
             <ShieldCheck className="h-3.5 w-3.5" />
             {t("chain.guardOk")}
@@ -82,6 +94,18 @@ export function ChainStatusBar() {
               </span>
             ))}
           </>
+        )}
+
+        {/* A failed scan is a property of the machine too — name it on every
+            route instead of only inside the workbench. */}
+        {error && (
+          <span
+            data-testid="chain-scan-error"
+            title={error}
+            className="min-w-0 max-w-[40%] truncate text-[11.5px] text-amber-400"
+          >
+            {t("chain.scanFailed")}: {error}
+          </span>
         )}
 
         <div className="ml-auto flex items-center gap-2.5 text-[11.5px] text-faint">

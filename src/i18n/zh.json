@@ -525,7 +525,8 @@
     "willUnlink": "将断开",
     "changeSummary": "＋{{added}} · −{{removed}}",
     "resultRemoved": "将断开的链接",
-    "unlinkSharedNotice": "其中含共享聚合层条目——断开后所有 Agent 都会失去该技能。"
+    "unlinkSharedNotice": "其中含共享聚合层条目——断开后所有 Agent 都会失去该技能。",
+    "guardUnknown": "全局面未验证 — 等待扫描结果"
   },
   "instructions": {
     "panelTitle": "Instructions 指令",
