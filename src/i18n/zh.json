@@ -441,7 +441,8 @@
         "conflict": "冲突",
         "skip": "跳过",
         "error": "错误"
-      }
+      },
+      "showMore": "还有 {{count}} 条，继续展开"
     },
     "pull": {
       "selected": "拉取 {{count}}",
@@ -600,7 +601,8 @@
       "body": "实体",
       "missing": "缺失",
       "native": "原生"
-    }
+    },
+    "residentSummary": "{{count}} 个入口 · 共 {{tokens}}"
   },
   "help": {
     "eyebrow": "操作指南",

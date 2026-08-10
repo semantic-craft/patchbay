@@ -74,6 +74,7 @@ export function ConfirmDialog({
             {t("common.cancel")}
           </button>
           <button
+            data-testid="confirm-dialog-confirm"
             onClick={handleConfirm}
             disabled={loading}
             className={

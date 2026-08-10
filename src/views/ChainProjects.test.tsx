@@ -363,7 +363,7 @@ describe("ChainProjects", () => {
     await screen.findByText("alpha");
 
     // Unlink previews first: the row action plans the Agent-scoped unlink.
-    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
+    fireEvent.click(screen.getByTestId("row-unlink"));
     expect(mockInvoke).toHaveBeenCalledWith("chain_plan_unlink", {
       projectPath: "/proj",
       skillName: "alpha",
@@ -372,8 +372,7 @@ describe("ChainProjects", () => {
 
     // The guarded confirmation opens before anything is written.
     await screen.findByText("Remove links");
-    const confirmButtons = screen.getAllByRole("button", { name: "Unlink" });
-    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+    fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));
 
     // Only on confirm is the previewed plan applied.
     await waitFor(() =>
@@ -401,7 +400,9 @@ describe("ChainProjects", () => {
 
     renderView();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Normalize" }));
+    // Instructions governance is folded behind a summary row now.
+    fireEvent.click(await screen.findByTestId("instructions-toggle"));
+    fireEvent.click(screen.getByRole("button", { name: "Normalize" }));
     expect(mockInvoke).toHaveBeenCalledWith("instructions_plan_normalize", {
       projectPath: "/proj",
       fingerprints: [],
@@ -448,7 +449,8 @@ describe("ChainProjects", () => {
 
     renderView();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Init" }));
+    fireEvent.click(await screen.findByTestId("instructions-toggle"));
+    fireEvent.click(screen.getByRole("button", { name: "Init" }));
     expect(mockInvoke).toHaveBeenCalledWith("instructions_plan_init", {
       projectPath: "/proj",
       docsDir: false,

@@ -70,6 +70,7 @@ export function LinkTable({ rows, topo, onUnlink }: LinkTableProps) {
               <td className="px-4 py-2 text-right">
                 {UNLINKABLE.has(entry.status) && (
                   <button
+                    data-testid="row-unlink"
                     onClick={() => onUnlink(entry.name, location)}
                     className="rounded border border-border-subtle px-2 py-0.5 text-[11px] font-medium text-muted transition-colors outline-none hover:border-red-500/40 hover:text-red-400"
                   >
