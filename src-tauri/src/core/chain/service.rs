@@ -8,6 +8,7 @@ use crate::core::{
     central_repo,
     error::AppError,
     project_registry,
+    skill_metadata,
     skill_store::{ProjectRecord, SkillStore},
     tool_adapters,
 };
@@ -1571,9 +1572,12 @@ fn verify_chain(
             return false;
         };
         let surface_path = super::project_links::surface_path(Path::new(&plan.project), rel);
-        observed
-            .iter()
-            .all(|name| std::fs::File::open(surface_path.join(name).join("SKILL.md")).is_ok())
+        observed.iter().all(|name| {
+            let skill_dir = surface_path.join(name);
+            skill_metadata::SKILL_DIR_MARKERS
+                .iter()
+                .any(|marker| std::fs::File::open(skill_dir.join(marker)).is_ok())
+        })
     });
 
     let clean = report
@@ -1829,6 +1833,49 @@ mod tests {
             .iter()
             .any(|entry| entry.action == "chain_link"
                 && entry.skill_name.as_deref() == Some("claude")));
+    }
+
+    #[test]
+    fn link_verifies_skill_with_lowercase_marker() {
+        let temp = tempdir().unwrap();
+        let projects_root = temp.path().join("Projects");
+        let warehouse_root = projects_root.join("xw-skills");
+        let repo_path = warehouse_root.join("source-repo");
+        let original = repo_path.join("skills").join("lower-skill");
+        let project = projects_root.join("demo-project");
+
+        fs::create_dir_all(&original).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        git2::Repository::init(&repo_path).unwrap();
+        // `is_valid_skill_dir` accepts both marker spellings; verification must
+        // not demand the uppercase one.
+        fs::write(
+            original.join("skill.md"),
+            "---\nname: lower-skill\ndescription: Lowercase marker fixture\n---\n",
+        )
+        .unwrap();
+
+        let store = SkillStore::new(&temp.path().join("patchbay.db")).unwrap();
+        store
+            .set_setting(
+                "chain_warehouse_root",
+                warehouse_root.to_string_lossy().as_ref(),
+            )
+            .unwrap();
+        store
+            .set_setting(
+                "chain_projects_root",
+                projects_root.to_string_lossy().as_ref(),
+            )
+            .unwrap();
+        let service = ChainService::new(&store);
+
+        let link = service
+            .link(&project, &[original.clone()], &["claude".to_string()])
+            .unwrap();
+        assert!(link.verified);
+        assert_eq!(link.observed, ["lower-skill"]);
+        assert!(link.missing.is_empty());
     }
 
     #[test]
