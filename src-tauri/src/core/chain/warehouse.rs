@@ -33,8 +33,8 @@ pub struct ProjectRef {
 pub struct RepoInfo {
     pub name: String,
     pub path: String,
-    /// `managed` for Patchbay's central library, `checkout` for a developer
-    /// Git repository discovered under a configured warehouse root.
+    /// Always `checkout`: a developer Git repository discovered under a
+    /// configured warehouse root.
     pub source_kind: String,
     /// Warehouse root this repo was discovered under — its source root, so the
     /// UI can attribute each Skill to the correct configured root.
@@ -121,53 +121,6 @@ pub fn scan_root(root: &Path) -> RootScan {
         status: "ok".to_string(),
         error: None,
         repos,
-    }
-}
-
-/// Represent Patchbay's central library as the default tier-1 source. Skills in
-/// this managed store are direct physical children; unlike developer checkouts,
-/// the library is not exposed to raw pull/fork operations by the chain UI.
-pub fn scan_managed_root(root: &Path) -> RepoInfo {
-    let mut skills = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let path = entry.path();
-            let is_symlink = std::fs::symlink_metadata(&path)
-                .map(|m| m.file_type().is_symlink())
-                .unwrap_or(true);
-            if name.starts_with('.')
-                || is_symlink
-                || !path.is_dir()
-                || !skill_metadata::is_valid_skill_dir(&path)
-            {
-                continue;
-            }
-            skills.push(RepoSkill {
-                name,
-                path: path.to_string_lossy().to_string(),
-            });
-        }
-    }
-    skills.sort_by(|a, b| a.name.cmp(&b.name));
-    let path = root.to_string_lossy().to_string();
-    RepoInfo {
-        name: "Patchbay Central".to_string(),
-        path: path.clone(),
-        source_kind: "managed".to_string(),
-        root: path,
-        health: RepoHealth {
-            dirty: false,
-            state: "up_to_date".to_string(),
-            ahead: 0,
-            behind: 0,
-            branch: None,
-            error: None,
-        },
-        origin: None,
-        upstream: None,
-        skills,
-        referenced_by: Vec::new(),
     }
 }
 

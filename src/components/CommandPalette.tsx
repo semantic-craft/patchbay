@@ -3,20 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Search,
-  Layers,
-  Download,
   Settings as SettingsIcon,
-  FolderOpen,
   Folder,
+  GitBranch,
   Home,
   LayoutDashboard,
   MonitorSmartphone,
+  Stethoscope,
   ArrowRight,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { cn } from "../utils";
 
-type ItemKind = "skill" | "project" | "action";
+type ItemKind = "project" | "action";
 
 interface PaletteItem {
   id: string;
@@ -31,11 +30,7 @@ interface PaletteItem {
 export function CommandPalette() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const {
-    managedSkills,
-    projects,
-    openSkillDetailById,
-  } = useApp();
+  const { projects } = useApp();
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -81,26 +76,6 @@ export function CommandPalette() {
   const items = useMemo<PaletteItem[]>(() => {
     const q = query.trim().toLowerCase();
 
-    const skillItems: PaletteItem[] = managedSkills
-      .filter(
-        (s) =>
-          !q ||
-          s.name.toLowerCase().includes(q) ||
-          (s.description || "").toLowerCase().includes(q),
-      )
-      .slice(0, 8)
-      .map((s) => ({
-        id: `skill:${s.id}`,
-        kind: "skill",
-        label: s.name,
-        sublabel: s.description || undefined,
-        icon: <Layers className="h-3.5 w-3.5" />,
-        run: () => {
-          navigate("/my-skills");
-          openSkillDetailById(s.id);
-        },
-      }));
-
     const projectItems: PaletteItem[] = projects
       .filter(
         (p) =>
@@ -122,16 +97,30 @@ export function CommandPalette() {
       {
         id: "action:workbench",
         kind: "action",
-        label: t("sidebar.workbench"),
+        label: t("home.tabWorkbench"),
         icon: <Home className="h-3.5 w-3.5" />,
         run: () => navigate("/"),
       },
       {
         id: "action:topology",
         kind: "action",
-        label: t("sidebar.chainOverview"),
+        label: t("home.tabChain"),
         icon: <LayoutDashboard className="h-3.5 w-3.5" />,
-        run: () => navigate("/chain/overview"),
+        run: () => navigate("/?tab=chain"),
+      },
+      {
+        id: "action:doctor",
+        kind: "action",
+        label: t("home.tabDoctor"),
+        icon: <Stethoscope className="h-3.5 w-3.5" />,
+        run: () => navigate("/?tab=doctor"),
+      },
+      {
+        id: "action:warehouse",
+        kind: "action",
+        label: t("home.tabWarehouse"),
+        icon: <GitBranch className="h-3.5 w-3.5" />,
+        run: () => navigate("/?tab=warehouse"),
       },
       {
         id: "action:fleet",
@@ -139,27 +128,6 @@ export function CommandPalette() {
         label: t("sidebar.fleet"),
         icon: <MonitorSmartphone className="h-3.5 w-3.5" />,
         run: () => navigate("/fleet"),
-      },
-      {
-        id: "action:my-skills",
-        kind: "action",
-        label: t("sidebar.mySkills"),
-        icon: <Layers className="h-3.5 w-3.5" />,
-        run: () => navigate("/my-skills"),
-      },
-      {
-        id: "action:install",
-        kind: "action",
-        label: t("sidebar.installSkills"),
-        icon: <Download className="h-3.5 w-3.5" />,
-        run: () => navigate("/install"),
-      },
-      {
-        id: "action:install-local",
-        kind: "action",
-        label: t("commandPalette.scanImport"),
-        icon: <FolderOpen className="h-3.5 w-3.5" />,
-        run: () => navigate("/install?tab=local"),
       },
       {
         id: "action:settings",
@@ -172,15 +140,8 @@ export function CommandPalette() {
     ];
     const actions = actionDefs.filter((a) => !q || a.label.toLowerCase().includes(q));
 
-    return [...skillItems, ...projectItems, ...actions];
-  }, [
-    query,
-    managedSkills,
-    projects,
-    openSkillDetailById,
-    navigate,
-    t,
-  ]);
+    return [...projectItems, ...actions];
+  }, [query, projects, navigate, t]);
 
   useEffect(() => {
     if (activeIndex >= items.length) setActiveIndex(0);
@@ -198,7 +159,6 @@ export function CommandPalette() {
   if (!open) return null;
 
   const groups: { kind: ItemKind; label: string }[] = [
-    { kind: "skill", label: t("commandPalette.skills") },
     { kind: "project", label: t("commandPalette.projects") },
     { kind: "action", label: t("commandPalette.actions") },
   ];
@@ -255,11 +215,7 @@ export function CommandPalette() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div
-                    className={cn(
-                      "truncate",
-                      item.kind === "skill" ? "font-mono" : "",
-                      active ? "text-primary" : "text-secondary",
-                    )}
+                    className={cn("truncate", active ? "text-primary" : "text-secondary")}
                   >
                     {item.label}
                   </div>

@@ -1,19 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import {
-  CloudUpload,
-  Download,
-  FolderOpen,
-  GitBranch,
-  Layers,
-  LayoutDashboard,
-  Link2,
-  MonitorSmartphone,
-  Plus,
-  Settings,
-  Stethoscope,
-  Trash2,
-} from "lucide-react";
+import { Link2, MonitorSmartphone, Plus, Settings, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { cn } from "../utils";
@@ -42,21 +29,17 @@ export function Sidebar() {
   // until a scan lands — then no dot is shown, because no health is known.
   const doctorReport = useDoctorReport();
   const [showAddProject, setShowAddProject] = useState(false);
-  const [deleteProjectTarget, setDeleteProjectTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteProjectTarget, setDeleteProjectTarget] = useState<{
+    id: string;
+    name: string;
+    path: string;
+  } | null>(null);
   const selectedProjectPath = new URLSearchParams(location.search).get("project");
 
-  // 「视图」小节：链路的几个观察面，项目工作台是主屏。
-  const viewItems = [
-    { name: t("sidebar.workbench"), path: "/", icon: FolderOpen },
-    { name: t("sidebar.chainOverview"), path: "/chain/overview", icon: LayoutDashboard },
-    { name: t("sidebar.chainWarehouse"), path: "/chain/warehouse", icon: GitBranch },
-    { name: t("sidebar.chainDoctor"), path: "/chain/doctor", icon: Stethoscope },
+  // 底部常驻：多机与设置。它们不是日常动线的一部分，所以沉在最下面。
+  const footerItems = [
     { name: t("sidebar.fleet"), path: "/fleet", icon: MonitorSmartphone },
-  ];
-  const libraryItems = [
-    { name: t("sidebar.mySkills"), path: "/my-skills", icon: Layers },
-    { name: t("sidebar.installSkills"), path: "/install", icon: Download },
-    { name: t("sidebar.backup"), path: "/backup", icon: CloudUpload },
+    { name: t("sidebar.settings"), path: "/settings", icon: Settings },
   ];
 
   const openProject = (path: string) => {
@@ -67,7 +50,7 @@ export function Sidebar() {
     if (!deleteProjectTarget) return;
     await api.removeProject(deleteProjectTarget.id);
     await refreshProjects();
-    if (location.pathname === "/chain/projects") navigate("/");
+    if (selectedProjectPath === deleteProjectTarget.path) navigate("/");
     toast.success(t("project.removed"));
   };
 
@@ -84,57 +67,6 @@ export function Sidebar() {
             {t("app.name")}
           </span>
         </div>
-
-        <div className="shrink-0 px-2.5">
-          <div className="mb-1 px-2.5 text-[12px] font-semibold tracking-[0.01em] text-muted">
-            {t("sidebar.views")}
-          </div>
-          <div className="space-y-0.5">
-            {viewItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-[5px] px-2.5 py-[7px] text-sm font-medium transition-colors outline-none",
-                    isActive
-                      ? "bg-glass-strong text-primary"
-                      : "text-tertiary hover:bg-glass-soft hover:text-secondary",
-                  )}
-                >
-                  <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-accent" : "text-muted")} />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </div>
-          <div className="mx-0.5 my-2.5 border-t border-glass-hairline" />
-          <div className="space-y-0.5">
-            {libraryItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-[5px] px-2.5 py-[7px] text-sm font-medium transition-colors outline-none",
-                    isActive
-                      ? "bg-glass-strong text-primary"
-                      : "text-tertiary hover:bg-glass-soft hover:text-secondary",
-                  )}
-                >
-                  <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-accent" : "text-muted")} />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="mx-3 mb-2.5 mt-3.5 border-t border-glass-hairline" />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2.5 scrollbar-hide">
           <div className="mb-1.5 flex items-center gap-1 px-2.5">
@@ -208,19 +140,26 @@ export function Sidebar() {
           </button>
         </div>
 
-        <div className="shrink-0 border-t border-glass-hairline p-2.5">
-          <Link
-            to="/settings"
-            className={cn(
-              "flex items-center gap-2.5 rounded-[5px] px-2.5 py-[7px] text-sm font-medium transition-colors outline-none",
-              location.pathname === "/settings"
-                ? "bg-glass-strong text-primary"
-                : "text-tertiary hover:bg-glass-soft hover:text-secondary",
-            )}
-          >
-            <Settings className={cn("h-4 w-4 shrink-0", location.pathname === "/settings" ? "text-accent" : "text-muted")} />
-            {t("sidebar.settings")}
-          </Link>
+        <div className="shrink-0 space-y-0.5 border-t border-glass-hairline p-2.5">
+          {footerItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-[5px] px-2.5 py-[7px] text-sm font-medium transition-colors outline-none",
+                  isActive
+                    ? "bg-glass-strong text-primary"
+                    : "text-tertiary hover:bg-glass-soft hover:text-secondary",
+                )}
+              >
+                <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-accent" : "text-muted")} />
+                {item.name}
+              </Link>
+            );
+          })}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 // Boundary under test: the Tauri invocation adapter. We mock `invoke` and let
 // the real chain bindings + the Project Links view run on top of it. The folder
@@ -24,7 +24,6 @@ vi.mock("sonner", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { Route, Routes } from "react-router-dom";
 import { ChainProjects } from "./ChainProjects";
 import type {
   ChainApplyOutcome,
@@ -1429,17 +1428,23 @@ describe("ChainProjects", () => {
   });
 
   it("jumps to the full diagnosis from the evidence card", async () => {
+    // The doctor is a section of the main screen now, so "see full diagnosis"
+    // is a query-param switch rather than a route change.
+    function LocationProbe() {
+      const location = useLocation();
+      return <div data-testid="location">{location.pathname + location.search}</div>;
+    }
     render(
-      <MemoryRouter initialEntries={["/chain/projects"]}>
-        <Routes>
-          <Route path="/chain/doctor" element={<div data-testid="doctor-page" />} />
-          <Route path="*" element={<ChainProjects />} />
-        </Routes>
+      <MemoryRouter initialEntries={["/"]}>
+        <ChainProjects />
+        <LocationProbe />
       </MemoryRouter>,
     );
 
     fireEvent.click(await screen.findByTestId("card-diagnose"));
-    expect(await screen.findByTestId("doctor-page")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("/?tab=doctor"),
+    );
   });
 
   it("stays green when the only finding belongs to another project", async () => {

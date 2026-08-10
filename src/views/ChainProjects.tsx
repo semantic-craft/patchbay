@@ -430,7 +430,7 @@ export function ChainProjects() {
                   group={storm.group}
                   fingerprints={storm.fingerprints}
                   skills={storm.skills}
-                  onViewDiagnosis={() => navigate("/chain/doctor")}
+                  onViewDiagnosis={() => navigate("/?tab=doctor")}
                   onItemize={() =>
                     setItemized((cur) => new Set([...cur, storm.key]))
                   }
@@ -442,7 +442,7 @@ export function ChainProjects() {
                   key={finding.fingerprint}
                   finding={finding}
                   candidates={candidates[finding.fingerprint] ?? []}
-                  onViewDiagnosis={() => navigate("/chain/doctor")}
+                  onViewDiagnosis={() => navigate("/?tab=doctor")}
                   onManual={
                     finding.deviation === "broken" ? () => manualUnlink(finding) : null
                   }

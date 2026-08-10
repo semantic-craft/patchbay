@@ -9,7 +9,6 @@ use walkdir::WalkDir;
 const CONFIG_FILE_NAME: &str = "repo-config.json";
 
 static BASE_DIR_OVERRIDE: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
-static SKILLS_DIR_OVERRIDE: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 static STARTUP_WARNINGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 fn push_startup_warning(code: &str) {
@@ -171,29 +170,9 @@ pub fn set_runtime_base_dir_override(path: Option<PathBuf>) {
         .unwrap() = path;
 }
 
-pub fn set_runtime_skills_dir_override(path: Option<PathBuf>) {
-    *SKILLS_DIR_OVERRIDE
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-        .unwrap() = path;
-}
-
 #[cfg(test)]
 pub(crate) fn set_test_base_dir_override(path: Option<PathBuf>) {
     set_runtime_base_dir_override(path);
-    set_runtime_skills_dir_override(None);
-}
-
-pub fn skills_dir() -> PathBuf {
-    if let Some(path) = SKILLS_DIR_OVERRIDE
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-        .unwrap()
-        .clone()
-    {
-        return path;
-    }
-    base_dir().join("skills")
 }
 
 /// Derive a stable per-skills-root state directory under the user's default base.
@@ -282,10 +261,6 @@ fn sanitize_dir_name(name: &str) -> String {
     } else {
         cleaned
     }
-}
-
-pub fn scenarios_dir() -> PathBuf {
-    base_dir().join("scenarios")
 }
 
 pub fn cache_dir() -> PathBuf {
@@ -406,7 +381,7 @@ fn migrate_repo_if_needed(config: &mut RepoPathConfig, current_base: &Path) -> R
     Ok(())
 }
 
-pub fn ensure_central_repo() -> Result<()> {
+pub fn ensure_app_dirs() -> Result<()> {
     // A config file that exists but cannot be used means the app is about to
     // run against the default location even though the user configured (and
     // populated) another one. Never let that pass silently — it presents as
@@ -416,7 +391,7 @@ pub fn ensure_central_repo() -> Result<()> {
             if let Some(raw) = config.repo_path.as_deref() {
                 if let Err(err) = normalize_path(raw) {
                     log::error!(
-                        "central repo: configured repo_path {raw:?} is invalid ({err}); \
+                        "app dirs: configured repo_path {raw:?} is invalid ({err}); \
                          falling back to the default location"
                     );
                     push_startup_warning("repo_path_invalid");
@@ -427,7 +402,7 @@ pub fn ensure_central_repo() -> Result<()> {
         ConfigState::Missing => RepoPathConfig::default(),
         ConfigState::Invalid(detail) => {
             log::error!(
-                "central repo: config is unreadable ({detail}); \
+                "app dirs: config is unreadable ({detail}); \
                  falling back to the default location"
             );
             push_startup_warning("config_unreadable");
@@ -438,7 +413,7 @@ pub fn ensure_central_repo() -> Result<()> {
     let current_base = base_dir();
     migrate_repo_if_needed(&mut config, &current_base)?;
 
-    let dirs = [skills_dir(), scenarios_dir(), cache_dir(), logs_dir()];
+    let dirs = [cache_dir(), logs_dir()];
     for d in &dirs {
         fs::create_dir_all(d)?;
     }

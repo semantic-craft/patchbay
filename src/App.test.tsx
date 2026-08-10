@@ -121,34 +121,36 @@ beforeEach(() => {
 });
 
 describe("AppRoutes", () => {
-  it("boots to the workbench at / with the views section in the sidebar", async () => {
+  it("boots to the workbench at / with only projects in the sidebar", async () => {
     renderApp("/");
     expect(await screen.findByRole("heading", { name: "Project Links" })).toBeTruthy();
     // First registered project is selected by default.
     expect(await screen.findByText("alpha-skill")).toBeTruthy();
-    // Sidebar views section.
-    expect(screen.getByText("Views")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Workbench" })).toBeTruthy();
+    // The sidebar is the project list plus the two footer destinations.
+    expect(screen.getByText("Projects")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Fleet" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Workbench" })).toBeNull();
   });
 
-  it("navigates to topology and development sources from the sidebar", async () => {
+  it("switches between the main screen's sections", async () => {
     renderApp("/");
     await screen.findByRole("heading", { name: "Project Links" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Topology" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chain" }));
     expect(await screen.findByRole("heading", { name: "Link Topology" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("link", { name: "Development Sources" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
     expect(await screen.findByRole("heading", { name: "Skill Sources" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("link", { name: "Workbench" }));
+    fireEvent.click(screen.getByRole("button", { name: "Workbench" }));
     expect(await screen.findByRole("heading", { name: "Project Links" })).toBeTruthy();
   });
 
-  it("redirects legacy /chain/projects deep links to the workbench, keeping ?project=", async () => {
-    renderApp("/chain/projects?project=%2Fproj2");
+  it("honours a ?project= deep link on the main screen", async () => {
+    renderApp("/?project=%2Fproj2");
     expect(await screen.findByRole("heading", { name: "Project Links" })).toBeTruthy();
-    // The preserved query selects the second project, not the default first.
+    // The query selects the second project, not the default first.
     expect(await screen.findByText("beta-skill")).toBeTruthy();
     expect(screen.queryByText("alpha-skill")).toBeNull();
   });

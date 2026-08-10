@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 发布概览
+- Patchbay 收敛为纯粹的三层链路工具。中央技能库及其上层功能——含排行榜的技能市场、本地/Git 安装、GitHub 备份与多设备同步、把 Preset 应用到全局 Agent 面、以及各 Agent 工作区——全部移除。技能只住在用户自己的 Git 仓库里，Patchbay 负责把它们接进项目并保持全局面为空。
+
+### 用户可见
+- **单一主屏。** 侧边栏只剩项目列表加多机与设置；链路、诊断、开发源改为主屏内的分区，导航入口从九个降到项目列表加两项。
+- **移除：技能库、安装、备份、Agent 与全局工作区、项目详情页。** 托盘菜单精简为「打开 Patchbay / 退出」。
+- **链路的技能源只认 Git 检出。**「Patchbay Central」不再是一层技能源，中央库路径设置一并移除。
+
+### 开发与治理
+- 删除市场、安装器、同步引擎、备份、自动备份、scenario、Agent 工作区与 Preset 模块及其命令；Tauri 命令面从 163 个降到 80 个。
+- `patchbay-cli` 保留 `chain`、`instructions`、`fleet`、`tools`，新增 `status`（数据目录与数据库路径），移除 `repo`、`skills`、`presets`、`git` 及 `--skills-root`。
+- `core::central_repo` 改名为 `core::app_dirs`，只负责应用自身状态（`~/.patchbay`）；`git_credentials` 保留钥匙串远端凭证，去掉 GitHub App 流程。
+- 净删减约 3.9 万行。Rust 与前端测试全绿（619 + 114 项）。
+
 ## [1.32.1] - 2026-07-29
 
 ### 发布概览

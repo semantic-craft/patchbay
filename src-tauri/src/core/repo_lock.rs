@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::time::{Duration, Instant};
 
-use super::central_repo;
+use super::app_dirs;
 
 /// Filename used for the central-repository write lock.
 ///
@@ -95,7 +95,7 @@ impl RepoLock {
 }
 
 fn open_lock_file() -> Result<File> {
-    let base = central_repo::base_dir();
+    let base = app_dirs::base_dir();
     std::fs::create_dir_all(&base)?;
     let lock_path = base.join(LOCK_FILE_NAME);
     OpenOptions::new()
@@ -122,40 +122,16 @@ mod tests {
     /// directory makes it impossible to rename or remove that directory
     /// (Access is denied / os error 5), which broke the clone-with-backup
     /// flow used by "use existing remote backup".
-    #[test]
-    fn lock_file_lives_outside_skills_dir() {
-        let _guard = central_repo::test_base_dir_lock();
-        let tmp = tempdir().unwrap();
-        let base = tmp.path().join("base");
-        central_repo::set_test_base_dir_override(Some(base.clone()));
-        let skills_dir = central_repo::skills_dir();
-        std::fs::create_dir_all(&skills_dir).unwrap();
-
-        let lock = RepoLock::acquire("test").unwrap();
-
-        assert!(base.join(LOCK_FILE_NAME).exists());
-        assert!(!skills_dir.join(LOCK_FILE_NAME).exists());
-
-        let entries: Vec<_> = std::fs::read_dir(&skills_dir).unwrap().collect();
-        assert!(
-            entries.is_empty(),
-            "skills_dir should remain empty while the lock is held; got {entries:?}"
-        );
-
-        drop(lock);
-        central_repo::set_test_base_dir_override(None);
-    }
-
     /// A blocking acquire must report "busy" only after waiting roughly the
     /// requested timeout while another holder keeps the lock, and must succeed
     /// once that holder releases. This is the behaviour foreground operations
     /// rely on to ride out transient contention with background work.
     #[test]
     fn blocking_acquire_waits_then_times_out_and_recovers() {
-        let _guard = central_repo::test_base_dir_lock();
+        let _guard = app_dirs::test_base_dir_lock();
         let tmp = tempdir().unwrap();
         let base = tmp.path().join("base");
-        central_repo::set_test_base_dir_override(Some(base));
+        app_dirs::set_test_base_dir_override(Some(base));
 
         let held = RepoLock::acquire("holder").unwrap();
 
@@ -173,6 +149,6 @@ mod tests {
         assert!(recovered.is_ok(), "should acquire once the holder releases");
         drop(recovered);
 
-        central_repo::set_test_base_dir_override(None);
+        app_dirs::set_test_base_dir_override(None);
     }
 }
