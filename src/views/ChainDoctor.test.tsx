@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { screen, fireEvent, within } from "@testing-library/react";
 
 // Boundary under test: the Tauri invocation adapter. We mock `invoke` and let
 // the real `chainDoctorReport` binding + the Doctor view run on top of it.
@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
 import { ChainDoctor } from "./ChainDoctor";
+import { renderWithChain } from "../test/renderWithChain";
 import type {
   ChainDoctorReport,
   ChainFinding,
@@ -124,7 +125,7 @@ describe("ChainDoctor", () => {
   });
 
   it("renders a populated report and filters by type and severity", async () => {
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
 
     // All findings render once the read-only report resolves.
     const rows = await screen.findAllByTestId("finding");
@@ -145,7 +146,7 @@ describe("ChainDoctor", () => {
 
   it("merges chain deviations with instructions rules under shared severity filters", async () => {
     mockDoctorReports(POPULATED, INSTRUCTIONS_POPULATED);
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
 
     expect(await screen.findAllByTestId("finding")).toHaveLength(7);
     expect(mockInvoke).toHaveBeenCalledWith("instructions_doctor_report", {
@@ -178,7 +179,7 @@ describe("ChainDoctor", () => {
 
   it("renders instructions paths, metrics, and locations in the shared finding row", async () => {
     mockDoctorReports(POPULATED, INSTRUCTIONS_POPULATED);
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
 
     const row = screen
@@ -195,7 +196,7 @@ describe("ChainDoctor", () => {
   });
 
   it("reveals the same chain evidence when a finding is opened", async () => {
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
 
     const directRow = screen
@@ -211,7 +212,7 @@ describe("ChainDoctor", () => {
   });
 
   it("inspects a violation finding and shows its chain evidence", async () => {
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
 
     // A violation is the highest-severity finding class; open the first one and
@@ -258,7 +259,7 @@ describe("ChainDoctor", () => {
       return Promise.resolve(POPULATED);
     });
 
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
 
     const directRow = screen
@@ -282,7 +283,7 @@ describe("ChainDoctor", () => {
   it("shows a clean state when the report has no findings", async () => {
     const emptyChain = { findings: [], ignored: [], total: 0, scanned_at: 0 };
     mockDoctorReports(emptyChain, INSTRUCTIONS_EMPTY);
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
 
     await screen.findByTestId("doctor-clean");
     expect(screen.queryAllByTestId("finding")).toHaveLength(0);
@@ -291,7 +292,7 @@ describe("ChainDoctor", () => {
   });
 
   it("ignores a finding from its expanded panel", async () => {
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
 
     const directRow = screen
@@ -311,7 +312,7 @@ describe("ChainDoctor", () => {
 
   it("routes instructions ignore through the instructions decision binding", async () => {
     mockDoctorReports(POPULATED, INSTRUCTIONS_POPULATED);
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
 
     const row = screen
@@ -332,7 +333,7 @@ describe("ChainDoctor", () => {
   });
 
   it("classifies a copy finding as project-private", async () => {
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
 
     const copyRow = screen
@@ -362,7 +363,7 @@ describe("ChainDoctor", () => {
     };
     mockDoctorReports(withIgnored, INSTRUCTIONS_EMPTY);
 
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     await screen.findByTestId("ignored-section");
     expect(screen.getAllByTestId("ignored-finding")).toHaveLength(1);
 
@@ -391,7 +392,7 @@ describe("ChainDoctor", () => {
       ignoredInstructions,
     );
 
-    render(<ChainDoctor />);
+    renderWithChain(<ChainDoctor />);
     const row = await screen.findByTestId("ignored-finding");
     expect(row.getAttribute("data-module")).toBe("instructions");
     fireEvent.click(within(row).getByTestId("restore"));

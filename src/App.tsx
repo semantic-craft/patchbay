@@ -1,12 +1,15 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppProvider } from "./context/AppContext";
+import { ChainProvider } from "./context/ChainContext";
 import { ThemeProvider, useThemeContext } from "./context/ThemeContext";
 import { HelpDialog } from "./components/HelpDialog";
 import { CloseActionGuard } from "./components/CloseActionGuard";
 import { AppUpdateNotifier } from "./components/AppUpdateNotifier";
 import { Layout } from "./components/Layout";
-import { Home } from "./views/Home";
+import { ChainProjects } from "./views/ChainProjects";
+import { ChainDoctor } from "./views/ChainDoctor";
+import { ChainWarehouse } from "./views/ChainWarehouse";
 import { Settings } from "./views/Settings";
 import { Fleet } from "./views/Fleet";
 
@@ -31,7 +34,10 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
+        {/* The workbench IS the main screen — one job, no shell around it. */}
+        <Route path="/" element={<ChainProjects />} />
+        <Route path="/doctor" element={<ChainDoctor />} />
+        <Route path="/sources" element={<ChainWarehouse />} />
         <Route path="/fleet" element={<Fleet />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
@@ -43,13 +49,15 @@ function App() {
   return (
     <ThemeProvider>
       <AppProvider>
-        <BrowserRouter>
-          <AppRoutes />
-          <HelpDialog />
-          <CloseActionGuard />
-        </BrowserRouter>
-        <ThemedToaster />
-        <AppUpdateNotifier />
+        <ChainProvider>
+          <BrowserRouter>
+            <AppRoutes />
+            <HelpDialog />
+            <CloseActionGuard />
+          </BrowserRouter>
+          <ThemedToaster />
+          <AppUpdateNotifier />
+        </ChainProvider>
       </AppProvider>
     </ThemeProvider>
   );

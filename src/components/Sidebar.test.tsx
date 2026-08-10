@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
 
-// The sidebar's health dots read the Doctor report the workbench publishes
-// (#30). AppContext is stubbed to just the registry projects — its refresh
-// machinery is not the subject here.
+// The sidebar's health dots read the Doctor report from the shared chain scan.
+// AppContext is stubbed to just the registry projects — its refresh machinery
+// is not the subject here.
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -19,9 +18,12 @@ vi.mock("../context/AppContext", () => ({
   }),
 }));
 
+import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "./Sidebar";
-import { publishDoctorReport } from "../lib/doctorStore";
+import { renderWithChain } from "../test/renderWithChain";
 import type { ChainDoctorReport } from "../lib/tauri";
+
+const mockInvoke = vi.mocked(invoke);
 
 const REPORT: ChainDoctorReport = {
   findings: [
@@ -48,29 +50,41 @@ const REPORT: ChainDoctorReport = {
   scanned_at: 0,
 };
 
-function renderSidebar() {
-  return render(
-    <MemoryRouter>
-      <Sidebar />
-    </MemoryRouter>,
-  );
+function renderSidebar(report: ChainDoctorReport | null) {
+  mockInvoke.mockImplementation((cmd: string) => {
+    if (cmd === "chain_get_topology") {
+      return Promise.resolve({
+        warehouse_roots: [],
+        projects_root: "/Users/x/Projects",
+        repos: [],
+        projects: [],
+        guard: [],
+        scanned_at: 0,
+      });
+    }
+    if (cmd === "chain_doctor_report") {
+      return report ? Promise.resolve(report) : Promise.reject(new Error("unavailable"));
+    }
+    return Promise.resolve(undefined);
+  });
+  return renderWithChain(<Sidebar />);
 }
 
 describe("Sidebar health dots", () => {
   beforeEach(() => {
-    publishDoctorReport(null);
+    mockInvoke.mockReset();
   });
 
-  it("shows no dot before any Doctor report exists", () => {
-    renderSidebar();
+  it("shows no dot while no Doctor report exists", async () => {
+    renderSidebar(null);
+    await waitFor(() => expect(screen.getByText("proj")).toBeTruthy());
     expect(screen.queryByTestId("project-health")).toBeNull();
   });
 
-  it("colors each project by its own findings once a report lands", () => {
-    publishDoctorReport(REPORT);
-    renderSidebar();
+  it("colors each project by its own findings once a report lands", async () => {
+    renderSidebar(REPORT);
 
-    const dots = screen.getAllByTestId("project-health");
+    const dots = await screen.findAllByTestId("project-health");
     expect(dots).toHaveLength(2);
     // /proj has a violation finding; /other is green in the same report.
     expect(dots[0].getAttribute("data-state")).toBe("attention");

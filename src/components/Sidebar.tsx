@@ -1,11 +1,20 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Link2, MonitorSmartphone, Plus, Settings, Trash2 } from "lucide-react";
+import {
+  GitBranch,
+  Link2,
+  MonitorSmartphone,
+  Plus,
+  Search,
+  Settings,
+  Stethoscope,
+  Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { cn } from "../utils";
 import { useApp } from "../context/AppContext";
-import { useDoctorReport } from "../lib/doctorStore";
+import { useChain } from "../context/ChainContext";
 import { projectHealth } from "../lib/workbenchState";
 import type { ChainSeverity } from "../lib/tauri";
 import { AddProjectDialog } from "./AddProjectDialog";
@@ -25,9 +34,10 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { projects, refreshProjects } = useApp();
-  // Latest Doctor report, published by the workbench after each scan. `null`
-  // until a scan lands — then no dot is shown, because no health is known.
-  const doctorReport = useDoctorReport();
+  // The shared scan's Doctor report. `null` until the first scan lands — then
+  // no dot is shown, because no health is known.
+  const { doctor: doctorReport } = useChain();
+  const [query, setQuery] = useState("");
   const [showAddProject, setShowAddProject] = useState(false);
   const [deleteProjectTarget, setDeleteProjectTarget] = useState<{
     id: string;
@@ -36,11 +46,21 @@ export function Sidebar() {
   } | null>(null);
   const selectedProjectPath = new URLSearchParams(location.search).get("project");
 
-  // 底部常驻：多机与设置。它们不是日常动线的一部分，所以沉在最下面。
+  // 底部常驻：出问题才去的诊断、技能源，以及多机与设置。它们不在日常动线上，
+  // 所以沉在最下面 —— 但它们是真正的目的地，不再是主屏里的页内标签。
   const footerItems = [
+    { name: t("sidebar.doctor"), path: "/doctor", icon: Stethoscope },
+    { name: t("sidebar.sources"), path: "/sources", icon: GitBranch },
     { name: t("sidebar.fleet"), path: "/fleet", icon: MonitorSmartphone },
     { name: t("sidebar.settings"), path: "/settings", icon: Settings },
   ];
+
+  // 51 个项目时列表本身就是导航负担，给它一个过滤框。
+  const visibleProjects = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((project) => project.name.toLowerCase().includes(q));
+  }, [projects, query]);
 
   const openProject = (path: string) => {
     navigate(`/?project=${encodeURIComponent(path)}`);
@@ -68,15 +88,22 @@ export function Sidebar() {
           </span>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2.5 scrollbar-hide">
-          <div className="mb-1.5 flex items-center gap-1 px-2.5">
-            <span className="min-w-0 flex-1 truncate whitespace-nowrap text-[12px] font-semibold tracking-[0.01em] text-muted">
-              {t("sidebar.projects")}
-            </span>
+        <div className="shrink-0 px-2.5 pb-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-faint" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("sidebar.filterProjects")}
+              aria-label={t("sidebar.filterProjects")}
+              className="h-7 w-full rounded-[5px] border border-glass-hairline bg-glass-soft pl-7 pr-2 text-[12.5px] text-secondary outline-none transition-colors placeholder:text-faint focus:border-accent-border"
+            />
           </div>
+        </div>
 
+        <div className="min-h-0 flex-1 overflow-y-auto px-2.5 scrollbar-hide">
           <div className="space-y-0.5">
-            {projects.map((project) => {
+            {visibleProjects.map((project) => {
               const isActive = location.pathname === "/" && selectedProjectPath === project.path;
               const health = projectHealth(doctorReport, project.path);
               return (
@@ -129,6 +156,11 @@ export function Sidebar() {
                 </div>
               );
             })}
+            {visibleProjects.length === 0 && (
+              <div className="px-2.5 py-3 text-[12.5px] text-faint">
+                {t("sidebar.noProjectMatch")}
+              </div>
+            )}
           </div>
 
           <button

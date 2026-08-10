@@ -9,7 +9,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn } from "../utils";
-import { ChainScanStatus } from "../components/ChainScanStatus";
+import { useChain } from "../context/ChainContext";
 import {
   chainApplyRepair,
   chainDoctorReport,
@@ -118,6 +118,10 @@ function useCounts<F, K extends string>(findings: F[], key: (f: F) => K) {
 
 export function ChainDoctor() {
   const { t } = useTranslation();
+  // The shared scan's chain report keeps every area on one verdict; the
+  // instructions report is fetched here because it is large and only this
+  // area reads it.
+  const { reload: reloadChain } = useChain();
   const [reports, setReports] = useState<DoctorReports | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,12 +145,15 @@ export function ChainDoctor() {
         instructionsDoctorReport(),
       ]);
       setReports({ chain, instructions });
+      // Keep the shell and the other areas on the same findings a decision
+      // here just changed.
+      void reloadChain();
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reloadChain]);
 
   useEffect(() => {
     void load();
@@ -264,9 +271,6 @@ export function ChainDoctor() {
   // "Clean" is a first-class outcome only when nothing is visible AND nothing
   // is merely hidden — an all-ignored project shows the Ignored panel instead.
   const clean = reports !== null && findings.length === 0 && ignored.length === 0;
-  const scannedAt = reports
-    ? Math.max(reports.chain.scanned_at, reports.instructions.scanned_at)
-    : undefined;
 
   return (
     <div className="app-page">
@@ -274,7 +278,6 @@ export function ChainDoctor() {
         <div>
           <h1 className="app-page-title">{t("chain.doctor.title")}</h1>
           <p className="app-page-subtitle">{t("instructions.doctor.subtitle")}</p>
-          <ChainScanStatus scannedAt={scannedAt} loading={loading} />
         </div>
         <button className="app-button-secondary" onClick={() => void load()} disabled={loading}>
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />

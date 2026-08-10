@@ -6,7 +6,12 @@
     "projects": "Projects",
     "addProject": "Link Project",
     "settings": "Settings",
-    "fleet": "Fleet"
+    "fleet": "Fleet",
+    "workbench": "Workbench",
+    "doctor": "Diagnostics",
+    "sources": "Skill Sources",
+    "filterProjects": "Filter projects…",
+    "noProjectMatch": "No matching project"
   },
   "fleet": {
     "title": "Fleet",
@@ -166,7 +171,6 @@
     }
   },
   "chain": {
-    "overviewTitle": "Link Topology",
     "rootsTitle": "Original Repository roots",
     "rootsHint": "Folders scanned for Original Repositories. Scanned in order; duplicate roots are scanned once.",
     "rootAdd": "Add root…",
@@ -178,12 +182,9 @@
     "rootsEmpty": "No roots configured — using the default.",
     "rootSource": "root: {{name}}",
     "reposCount": "{{count}} repos",
-    "overviewSubtitle": "Patchbay Central or developer checkouts → project .agents/skills → agent entry links; global surfaces stay empty",
     "projectsTitle": "Project Links",
     "projectsSubtitle": "Per-project skill chains and agent entry status — link and unlink skills for each project",
     "workbench": {
-      "greenTitle": "All {{count}} links healthy",
-      "greenSubtitle": "nothing needs you",
       "allNormal": "{{count}} normal",
       "expand": "Expand",
       "collapse": "Collapse",
@@ -266,7 +267,9 @@
       "wizardBack": "Back",
       "wizardNext": "Next",
       "wizardApply": "Create",
-      "wizardApplying": "Creating…"
+      "wizardApplying": "Creating…",
+      "linkCount": "{{count}} links",
+      "quietCount": "{{count}} notices, nothing to do"
     },
     "guardOk": "Global surfaces empty",
     "guardBad": "Skills found on global surfaces",
@@ -297,9 +300,6 @@
       "scannedHoursAgo": "Scanned {{count}}h ago",
       "scannedDaysAgo": "Scanned {{count}}d ago"
     },
-    "tierRepos": "1 · Skill sources",
-    "tierAgg": "2 · Project .agents/skills",
-    "tierSurfaces": "3 · Agent entries",
     "empty": "empty",
     "absent": "absent",
     "dirty": "uncommitted changes",
@@ -341,7 +341,6 @@
     "dirLinkOk": "dir link ✓",
     "dirLinkBad": "dir link broken",
     "noAgg": "no .agents/skills",
-    "detailHint": "Click a node to inspect its hop-by-hop chain",
     "location": "Location",
     "skill": "Skill",
     "chainCol": "Resolution",
@@ -382,7 +381,7 @@
     "resultEntries": "Agent entries",
     "close": "Close",
     "doctor": {
-      "title": "Doctor",
+      "title": "Diagnostics",
       "subtitle": "Findings for topology deviations — filter by severity and type, then repair, ignore, or mark project-private",
       "clean": "No deviations found. Every managed chain follows the convention.",
       "noMatch": "No findings match the active filters.",
@@ -520,7 +519,9 @@
         "up_to_date": "up to date",
         "error": "error"
       }
-    }
+    },
+    "noProjectSelected": "No project yet",
+    "noProjectHint": "Pick a project folder to start"
   },
   "instructions": {
     "panelTitle": "Instructions",
@@ -529,9 +530,6 @@
     "noAgents": "No agents installed",
     "projectSegment": "project",
     "globalSegment": "global",
-    "costBarTitle": "Instructions cost",
-    "costBarHint": "Global resident tokens per agent — click for the per-project breakdown",
-    "costBarEmpty": "No global instructions",
     "doctor": {
       "subtitle": "Findings for skill chains and instructions surfaces — share severity filters and filter types by module",
       "clean": "No chain or instructions findings. Every managed surface follows the convention.",
@@ -815,11 +813,5 @@
     "addSelected": "Add Selected ({{count}})",
     "selectAll": "Select All",
     "deselectAll": "Deselect All"
-  },
-  "home": {
-    "tabWorkbench": "Workbench",
-    "tabChain": "Chain",
-    "tabDoctor": "Doctor",
-    "tabWarehouse": "Skill Sources"
   }
 }
