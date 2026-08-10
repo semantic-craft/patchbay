@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Folder,
   FolderOpen,
   RefreshCw,
   Globe,
   Link as LinkIcon,
-  Copy,
   Settings2,
   Github,
   Loader2,
@@ -168,21 +166,13 @@ export function Settings() {
   const { tools, refreshTools, openHelp } = useApp();
   const [togglingTools, setTogglingTools] = useState<Set<string>>(new Set());
   const { theme, setTheme } = useThemeContext();
-  const [syncMode, setSyncMode] = useState("symlink");
   const [closeAction, setCloseAction] = useState("");
   const [showTrayIcon, setShowTrayIcon] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [openingRepo, setOpeningRepo] = useState(false);
   const [openingGithub, setOpeningGithub] = useState(false);
   const [reportingIssue, setReportingIssue] = useState(false);
   const [exportingLogs, setExportingLogs] = useState(false);
   const [lastPanic, setLastPanic] = useState<api.PanicInfo | null>(null);
-  const [repoWarnings, setRepoWarnings] = useState<string[]>([]);
-  const [centralRepoPath, setCentralRepoPath] = useState("");
-  const [centralRepoPathOverride, setCentralRepoPathOverride] = useState<string | null>(null);
-  const [editingCentralRepoPath, setEditingCentralRepoPath] = useState(false);
-  const [centralRepoPathInput, setCentralRepoPathInput] = useState("");
-  const [savingCentralRepoPath, setSavingCentralRepoPath] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -325,11 +315,9 @@ export function Settings() {
 
   useEffect(() => {
     api.checkLastPanic().then(setLastPanic).catch(() => {});
-    api.getCentralRepoWarnings().then(setRepoWarnings).catch(() => {});
   }, []);
 
   useEffect(() => {
-    api.getSettings("sync_mode").then((v) => { if (v) setSyncMode(v); });
     api.getSettings("proxy_url").then((v) => { setProxyInput(v ?? ""); });
     api.getSettings("close_action").then((v) => { setCloseAction(v ?? ""); });
     api.getSettings("show_tray_icon").then((v) => {
@@ -350,11 +338,6 @@ export function Settings() {
         prev && Date.parse(prev) >= Date.parse(v) ? prev : v
       );
     });
-    api.getCentralRepoPath().then((path) => {
-      setCentralRepoPath(path);
-      setCentralRepoPathInput(path);
-    }).catch(() => {});
-    api.getCentralRepoPathOverride().then(setCentralRepoPathOverride).catch(() => {});
   }, []);
 
   const handleRefresh = async () => {
@@ -388,11 +371,6 @@ export function Settings() {
     } catch {
       toast.error(t("common.error"));
     }
-  };
-
-  const handleSyncModeChange = async (mode: string) => {
-    setSyncMode(mode);
-    await api.setSettings("sync_mode", mode);
   };
 
   const handleCloseActionChange = async (action: string) => {
@@ -456,61 +434,6 @@ export function Settings() {
         .catch(() => {});
     };
   }, []);
-
-  const handleOpenRepoInFinder = async () => {
-    try {
-      setOpeningRepo(true);
-      await api.openCentralRepoFolder();
-    } catch (error) {
-      console.error("Failed to open central repository folder", error);
-      toast.error(t("common.error"));
-    } finally {
-      setOpeningRepo(false);
-    }
-  };
-
-  const handleStartEditCentralRepoPath = () => {
-    setCentralRepoPathInput(centralRepoPathOverride ?? centralRepoPath);
-    setEditingCentralRepoPath(true);
-  };
-
-  const handleSaveCentralRepoPath = async () => {
-    const trimmed = centralRepoPathInput.trim();
-    if (!trimmed) {
-      toast.error(t("settings.repoPathEmpty"));
-      return;
-    }
-    setSavingCentralRepoPath(true);
-    try {
-      const nextPath = await api.setCentralRepoPath(trimmed);
-      setCentralRepoPath(nextPath);
-      setCentralRepoPathOverride(nextPath);
-      setEditingCentralRepoPath(false);
-      toast.success(t("settings.repoPathSaved"));
-      toast.info(t("settings.repoPathRestartNotice"));
-    } catch (error) {
-      toast.error(String(error));
-    } finally {
-      setSavingCentralRepoPath(false);
-    }
-  };
-
-  const handleResetCentralRepoPath = async () => {
-    setSavingCentralRepoPath(true);
-    try {
-      const nextPath = await api.setCentralRepoPath(null);
-      setCentralRepoPath(nextPath);
-      setCentralRepoPathOverride(null);
-      setCentralRepoPathInput(nextPath);
-      setEditingCentralRepoPath(false);
-      toast.success(t("settings.repoPathReset"));
-      toast.info(t("settings.repoPathRestartNotice"));
-    } catch (error) {
-      toast.error(String(error));
-    } finally {
-      setSavingCentralRepoPath(false);
-    }
-  };
 
   const handleOpenGithub = async () => {
     try {
@@ -576,7 +499,7 @@ export function Settings() {
         `- OS: \`${info.os} ${info.os_version} (${info.arch})\``,
         `- UI locale: \`${i18n.language}\``,
         `- Enabled agents: ${agentsLine}`,
-        `- Central repo: \`${info.central_repo_path}\`${info.central_repo_path_overridden ? " (custom path)" : ""}`,
+        `- Data dir: \`${info.data_dir}\`${info.data_dir_overridden ? " (custom path)" : ""}`,
       ];
       if (panicInfo) {
         parts.push(
@@ -769,10 +692,6 @@ export function Settings() {
     },
     [tools, refreshTools, t]
   );
-  const displayedRepoPath = centralRepoPath
-    ? compactHomePath(centralRepoPath)
-    : t("common.loading");
-
   const renderAgentCard = (agent: typeof tools[number], dragHandle?: React.ReactNode) => (
     <div
       className={cn(
@@ -1209,148 +1128,6 @@ export function Settings() {
             {t("settings.globalConfig")}
           </h2>
           <div className="app-panel overflow-hidden divide-y divide-border-subtle">
-            {/* Repo path */}
-            <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <h3 className="text-[13px] text-secondary font-medium mb-0.5">{t("settings.repoPath")}</h3>
-                <p className="text-[13px] text-muted">{t("settings.repoPathDesc")}</p>
-              </div>
-              <div className="flex max-w-full flex-wrap items-center gap-2">
-                {editingCentralRepoPath ? (
-                  <div className="flex min-w-[320px] max-w-full items-center gap-1">
-                    <input
-                      type="text"
-                      value={centralRepoPathInput}
-                      onChange={(e) => setCentralRepoPathInput(e.target.value)}
-                      className="h-8 min-w-0 flex-1 rounded-[4px] border border-border-subtle bg-background px-2.5 text-[13px] font-mono text-secondary outline-none transition-colors focus:border-border"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void handleSaveCentralRepoPath();
-                        if (e.key === "Escape") {
-                          setCentralRepoPathInput(centralRepoPathOverride ?? centralRepoPath);
-                          setEditingCentralRepoPath(false);
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleBrowsePath(setCentralRepoPathInput)}
-                      disabled={savingCentralRepoPath}
-                      className="inline-flex h-8 items-center gap-1 rounded-[4px] border border-border-subtle px-2.5 text-[13px] font-medium text-muted transition-colors outline-none hover:text-secondary disabled:opacity-60"
-                    >
-                      <FolderOpen className="w-3 h-3" />
-                      {t("settings.selectFolder")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveCentralRepoPath()}
-                      disabled={savingCentralRepoPath}
-                      className="inline-flex h-8 items-center gap-1 rounded-[4px] border border-emerald-500/30 px-2.5 text-[13px] font-medium text-emerald-600 transition-colors outline-none hover:bg-emerald-500/5 disabled:opacity-60"
-                    >
-                      {savingCentralRepoPath ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Check className="w-3 h-3" />
-                      )}
-                      {t("common.save")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCentralRepoPathInput(centralRepoPathOverride ?? centralRepoPath);
-                        setEditingCentralRepoPath(false);
-                      }}
-                      disabled={savingCentralRepoPath}
-                      className="inline-flex h-8 items-center gap-1 rounded-[4px] border border-border-subtle px-2.5 text-[13px] font-medium text-muted transition-colors outline-none hover:text-secondary disabled:opacity-60"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex min-w-0 items-center gap-1.5 rounded-[4px] border border-border-subtle bg-background px-2 py-1">
-                    <Folder className="w-3 h-3 text-muted" />
-                    <span className="truncate text-[13px] font-mono text-tertiary">{displayedRepoPath}</span>
-                  </div>
-                )}
-                {!editingCentralRepoPath && (
-                  <button
-                    type="button"
-                    onClick={handleStartEditCentralRepoPath}
-                    className="inline-flex h-8 items-center gap-1 rounded-[4px] border border-border-subtle px-2.5 text-[13px] font-medium text-muted transition-colors outline-none hover:text-secondary"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    {t("settings.changeDir")}
-                  </button>
-                )}
-                {!editingCentralRepoPath && centralRepoPathOverride && (
-                  <button
-                    type="button"
-                    onClick={() => void handleResetCentralRepoPath()}
-                    disabled={savingCentralRepoPath}
-                    className="inline-flex h-8 items-center gap-1 rounded-[4px] border border-border-subtle px-2.5 text-[13px] font-medium text-muted transition-colors outline-none hover:text-secondary disabled:opacity-60"
-                  >
-                    {savingCentralRepoPath ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <RotateCcw className="w-3 h-3" />
-                    )}
-                    {t("settings.resetPath")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleOpenRepoInFinder}
-                  disabled={openingRepo}
-                  className={cn(
-                    "inline-flex h-8 items-center gap-1 rounded-[4px] border px-2.5 text-[13px] font-medium transition-all outline-none",
-                    "border-accent-border bg-accent-bg text-accent",
-                    "hover:border-accent hover:bg-accent-bg",
-                    openingRepo && "cursor-wait opacity-70"
-                  )}
-                >
-                  {openingRepo ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <ExternalLink className="w-3 h-3" />
-                  )}
-                  {t("settings.openInFinder")}
-                </button>
-              </div>
-              <div className="w-full text-[12px] text-muted">
-                {centralRepoPathOverride
-                  ? t("settings.repoPathCustomHint")
-                  : t("settings.repoPathDefaultHint")}
-              </div>
-            </div>
-
-            {/* Sync mode */}
-            <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <h3 className="text-[13px] text-secondary font-medium mb-0.5">{t("settings.syncMode")}</h3>
-                <p className="text-[13px] text-muted">{t("settings.syncModeDesc")}</p>
-              </div>
-              <div className="flex flex-wrap rounded-[4px] border border-border-subtle bg-background p-px">
-                <button
-                  onClick={() => handleSyncModeChange("symlink")}
-                  className={cn(
-                    segmentedButtonClass,
-                    syncMode === "symlink" ? "bg-surface-active text-secondary" : "text-muted hover:text-tertiary"
-                  )}
-                >
-                  <LinkIcon className="w-3 h-3" /> {t("settings.symlink")}
-                </button>
-                <button
-                  onClick={() => handleSyncModeChange("copy")}
-                  className={cn(
-                    segmentedButtonClass,
-                    syncMode === "copy" ? "bg-surface-active text-secondary" : "text-muted hover:text-tertiary"
-                  )}
-                >
-                  <Copy className="w-3 h-3" /> {t("settings.copy")}
-                </button>
-              </div>
-            </div>
-
             {/* Theme */}
             <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -1634,16 +1411,6 @@ export function Settings() {
 
         {/* About */}
         <section className="space-y-2">
-          {repoWarnings.length > 0 && (
-            <div className="app-panel flex flex-wrap items-start gap-2 p-3 border border-amber-500/40 bg-amber-500/10">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700 dark:text-amber-300" />
-              <div className="min-w-0 flex-1 space-y-1 text-[13px] text-amber-800 dark:text-amber-300">
-                {repoWarnings.map((code) => (
-                  <p key={code}>{t(`settings.repoWarning_${code}`)}</p>
-                ))}
-              </div>
-            </div>
-          )}
           {lastPanic && (
             <div className="app-panel flex flex-wrap items-center justify-between gap-2 p-3 border border-red-500/40 bg-red-500/10">
               <div className="flex min-w-0 items-center gap-2 text-[13px] text-red-700 dark:text-red-300">

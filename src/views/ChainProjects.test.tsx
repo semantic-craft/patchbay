@@ -1711,7 +1711,7 @@ describe("ChainProjects", () => {
 
     // The existing project is green with links, so no wizard — the same
     // picker arrives through「＋ 链接技能」instead.
-    fireEvent.click(await screen.findByRole("button", { name: "＋ Link skills" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
     const picker = await screen.findByTestId("skill-picker");
     fireEvent.click(within(picker).getByTestId("picker-preset-pill"));
     fireEvent.click(screen.getByRole("button", { name: "Preview plan" }));
@@ -1751,7 +1751,7 @@ describe("ChainProjects", () => {
     });
     renderView();
 
-    fireEvent.click(await screen.findByRole("button", { name: "＋ Link skills" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
 
     const picker = await screen.findByTestId("skill-picker");
     await waitFor(() => expect(topologyCalls).toBe(2));

@@ -170,24 +170,9 @@ export const getSettings = (key: string) =>
 export const setSettings = (key: string, value: string) =>
   invoke<void>("set_settings", { key, value });
 
-export const getCentralRepoPath = () =>
-  invoke<string>("get_central_repo_path");
-
-export const getCentralRepoPathOverride = () =>
-  invoke<string | null>("get_central_repo_path_override");
-
-export const getCentralRepoWarnings = () =>
-  invoke<string[]>("get_central_repo_warnings");
-
-export const setCentralRepoPath = (path?: string | null) =>
-  invoke<string>("set_central_repo_path", { path: path ?? null });
-
 export const appExit = () => invoke<void>("app_exit");
 
 export const hideToTray = () => invoke<void>("hide_to_tray");
-
-export const openCentralRepoFolder = () =>
-  invoke<void>("open_central_repo_folder");
 
 export interface AppUpdateInfo {
   has_update: boolean;
@@ -204,8 +189,8 @@ export interface DiagnosticInfo {
   os: string;
   os_version: string;
   arch: string;
-  central_repo_path: string;
-  central_repo_path_overridden: boolean;
+  data_dir: string;
+  data_dir_overridden: boolean;
 }
 
 export const getDiagnosticInfo = () =>
