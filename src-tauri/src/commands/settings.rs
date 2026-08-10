@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tauri::{Manager, State};
 
 use crate::core::{
-    central_repo, error::AppError, log_sanitize, skill_store::SkillStore, skillssh_api,
+    app_dirs, error::AppError, http, log_sanitize, skill_store::SkillStore,
 };
 
 #[derive(serde::Serialize)]
@@ -84,67 +84,6 @@ pub async fn set_settings(
 }
 
 #[tauri::command]
-pub fn get_central_repo_path() -> String {
-    central_repo::base_dir().to_string_lossy().to_string()
-}
-
-#[tauri::command]
-pub fn get_central_repo_path_override() -> Option<String> {
-    central_repo::configured_base_dir().map(|path| path.to_string_lossy().to_string())
-}
-
-/// Warning codes recorded while resolving the central repository at startup
-/// (e.g. unreadable config, invalid configured path). Non-empty means the app
-/// fell back to the default location and the user should be told (#228).
-#[tauri::command]
-pub fn get_central_repo_warnings() -> Vec<String> {
-    central_repo::startup_warnings()
-}
-
-#[tauri::command]
-pub async fn set_central_repo_path(path: Option<String>) -> Result<String, AppError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        central_repo::set_base_dir_override(path)
-            .map(|resolved| resolved.to_string_lossy().to_string())
-            .map_err(AppError::io)
-    })
-    .await?
-}
-
-#[tauri::command]
-pub async fn open_central_repo_folder() -> Result<(), AppError> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let repo_path = central_repo::base_dir();
-
-        #[cfg(target_os = "macos")]
-        let mut cmd = Command::new("open");
-        #[cfg(target_os = "windows")]
-        let mut cmd = {
-            let mut c = Command::new("explorer");
-            use std::os::windows::process::CommandExt;
-            c.creation_flags(0x08000000); // CREATE_NO_WINDOW
-            c
-        };
-        let status = cmd
-            .arg(&repo_path)
-            .status()
-            .map_err(|e| AppError::io(format!("Failed to open folder: {e}")))?;
-
-        // Windows explorer.exe returns exit code 1 even on success
-        #[cfg(not(target_os = "windows"))]
-        if !status.success() {
-            return Err(AppError::io(format!(
-                "File manager exited with status: {status}"
-            )));
-        }
-
-        let _ = status;
-        Ok(())
-    })
-    .await?
-}
-
-#[tauri::command]
 pub async fn check_app_update(
     app: tauri::AppHandle,
     store: State<'_, Arc<SkillStore>>,
@@ -152,7 +91,7 @@ pub async fn check_app_update(
     let current_version = app.config().version.clone().unwrap_or_default();
     let proxy_url = store.proxy_url();
     tauri::async_runtime::spawn_blocking(move || {
-        let client = skillssh_api::build_http_client(proxy_url.as_deref(), 15);
+        let client = http::build_http_client(proxy_url.as_deref(), 15);
 
         let resp: serde_json::Value = client
             .get(APP_RELEASES_API)
@@ -192,8 +131,8 @@ pub struct DiagnosticInfo {
     pub os: String,
     pub os_version: String,
     pub arch: String,
-    pub central_repo_path: String,
-    pub central_repo_path_overridden: bool,
+    pub data_dir: String,
+    pub data_dir_overridden: bool,
 }
 
 #[tauri::command]
@@ -203,15 +142,15 @@ pub async fn get_diagnostic_info(app: tauri::AppHandle) -> Result<DiagnosticInfo
         let os = std::env::consts::OS.to_string();
         let arch = std::env::consts::ARCH.to_string();
         let os_version = detect_os_version();
-        let configured = central_repo::configured_base_dir();
-        let central_repo_path = central_repo::base_dir().to_string_lossy().to_string();
+        let configured = app_dirs::configured_base_dir();
+        let data_dir = app_dirs::base_dir().to_string_lossy().to_string();
         Ok(DiagnosticInfo {
             app_version,
             os,
             os_version,
             arch,
-            central_repo_path,
-            central_repo_path_overridden: configured.is_some(),
+            data_dir,
+            data_dir_overridden: configured.is_some(),
         })
     })
     .await?
@@ -467,8 +406,8 @@ pub async fn export_logs_zip(
         .map_err(|e| AppError::io(format!("Failed to resolve log dir: {e}")))?;
     let app_name = app.package_info().name.clone();
     let app_version = app.config().version.clone().unwrap_or_default();
-    let central_path = central_repo::base_dir().to_string_lossy().to_string();
-    let central_overridden = central_repo::configured_base_dir().is_some();
+    let central_path = app_dirs::base_dir().to_string_lossy().to_string();
+    let central_overridden = app_dirs::configured_base_dir().is_some();
     let os = std::env::consts::OS.to_string();
     let arch = std::env::consts::ARCH.to_string();
     let os_version = detect_os_version();

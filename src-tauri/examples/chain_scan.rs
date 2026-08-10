@@ -27,10 +27,8 @@ fn main() {
         .collect();
 
     let adapters = app_lib::core::tool_adapters::default_tool_adapters();
-    let managed = app_lib::core::central_repo::skills_dir();
     let topo = app_lib::core::chain::build_topology(
         &[warehouse],
-        &managed,
         &projects,
         &project_paths,
         &adapters,

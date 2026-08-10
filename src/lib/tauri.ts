@@ -17,86 +17,13 @@ export interface ToolInfo {
   category: ToolCategory;
 }
 
-export interface ManagedSkill {
-  id: string;
-  name: string;
-  description: string | null;
-  source_type: string;
-  source_ref: string | null;
-  source_ref_resolved: string | null;
-  source_subpath: string | null;
-  source_branch: string | null;
-  source_revision: string | null;
-  remote_revision: string | null;
-  update_status: string;
-  last_checked_at: number | null;
-  last_check_error: string | null;
-  central_path: string;
-  enabled: boolean;
-  created_at: number;
-  updated_at: number;
-  status: string;
-  targets: SkillTarget[];
-  preset_ids: string[];
-  tags: string[];
-}
 
-export interface SkillTarget {
-  id: string;
-  skill_id: string;
-  tool: string;
-  target_path: string;
-  mode: string;
-  status: string;
-  synced_at: number | null;
-}
 
-export interface SkillToolToggle {
-  tool: string;
-  display_name: string;
-  installed: boolean;
-  globally_enabled: boolean;
-  enabled: boolean;
-}
 
-export interface SkillDocument {
-  skill_id: string;
-  filename: string;
-  content: string;
-  central_path: string;
-}
 
-export interface SourceSkillDocument {
-  skill_id: string;
-  filename: string;
-  content: string;
-  source_label: string;
-  revision: string;
-}
 
-export type SkillSourceDiffStatus = "added" | "removed" | "modified";
-export type SkillSourceDiffContentKind =
-  | "text"
-  | "binary"
-  | "too_large"
-  | "permission_only";
 
-export interface SkillSourceDiffEntry {
-  relative_path: string;
-  status: SkillSourceDiffStatus;
-  content_kind: SkillSourceDiffContentKind;
-  original_text: string | null;
-  updated_text: string | null;
-  executable_before: boolean;
-  executable_after: boolean;
-}
 
-export interface SkillSourceDiff {
-  skill_id: string;
-  source_label: string;
-  revision: string;
-  entries: SkillSourceDiffEntry[];
-}
 
 export interface Preset {
   id: string;
@@ -109,27 +36,8 @@ export interface Preset {
   updated_at: number;
 }
 
-export interface DiscoveredGroup {
-  name: string;
-  fingerprint: string | null;
-  locations: { id: string; tool: string; found_path: string }[];
-  imported: boolean;
-  found_at: number;
-}
 
-export interface ScanResult {
-  tools_scanned: number;
-  skills_found: number;
-  groups: DiscoveredGroup[];
-}
 
-export interface SkillsShSkill {
-  id: string;
-  skill_id: string;
-  name: string;
-  source: string;
-  installs: number;
-}
 
 export interface SyncHealth {
   in_sync: number;
@@ -153,35 +61,8 @@ export interface Project {
   updated_at: number;
 }
 
-export interface ProjectAgentTarget {
-  key: string;
-  display_name: string;
-  enabled: boolean;
-  installed: boolean;
-  is_custom: boolean;
-}
 
-export interface ProjectSkill {
-  name: string;
-  dir_name: string;
-  relative_path: string;
-  description: string | null;
-  path: string;
-  files: string[];
-  enabled: boolean;
-  agent: string;
-  agent_display_name: string;
-  tags: string[];
-  in_center: boolean;
-  sync_status: "project_only" | "in_sync" | "project_newer" | "center_newer" | "diverged";
-  center_skill_id: string | null;
-}
 
-export interface ProjectSkillDocument {
-  skill_name: string;
-  filename: string;
-  content: string;
-}
 
 // ── Tools ──
 
@@ -193,7 +74,6 @@ export const setToolEnabled = (key: string, enabled: boolean) =>
 export const setAllToolsEnabled = (enabled: boolean) =>
   invoke<void>("set_all_tools_enabled", { enabled });
 
-export const getToolOrder = () => invoke<string[]>("get_tool_order_cmd");
 
 export const setToolOrder = (order: string[]) =>
   invoke<void>("set_tool_order_cmd", { order });
@@ -234,169 +114,53 @@ export const removeCustomTool = (key: string) =>
 
 // ── Skills ──
 
-export const getManagedSkills = () =>
-  invoke<ManagedSkill[]>("get_managed_skills");
 
-export const getSkillsForPreset = (presetId: string) =>
-  invoke<ManagedSkill[]>("get_skills_for_preset", {
-    presetId,
-  });
 
-export const getSkillDocument = (skillId: string) =>
-  invoke<SkillDocument>("get_skill_document", { skillId });
 
-export const getSourceSkillDocument = (skillId: string) =>
-  invoke<SourceSkillDocument>("get_source_skill_document", { skillId });
 
-export const getSkillSourceDiff = (skillId: string) =>
-  invoke<SkillSourceDiff>("get_skill_source_diff", { skillId });
 
-export const deleteManagedSkill = (skillId: string) =>
-  invoke<void>("delete_managed_skill", { skillId });
 
-export interface BatchDeleteSkillsResult {
-  deleted: number;
-  failed: string[];
-}
 
-export const deleteManagedSkills = (skillIds: string[]) =>
-  invoke<BatchDeleteSkillsResult>("delete_managed_skills", { skillIds });
 
-export const installLocal = (sourcePath: string, name?: string) =>
-  invoke<void>("install_local", { sourcePath, name: name || null });
 
-export const installGit = (repoUrl: string, name?: string) =>
-  invoke<void>("install_git", { repoUrl, name: name || null });
 
-export interface GitSkillPreview {
-  /** Path relative to the resolved scan root, using `/` separators. Stable key. */
-  rel_path: string;
-  name: string;
-  description: string | null;
-}
 
-export interface GitPreviewResult {
-  temp_dir: string;
-  skills: GitSkillPreview[];
-}
 
-export interface SkillInstallItem {
-  rel_path: string;
-  name: string;
-}
 
-export const previewGitInstall = (repoUrl: string) =>
-  invoke<GitPreviewResult>("preview_git_install", { repoUrl });
 
-export const confirmGitInstall = (repoUrl: string, tempDir: string, items: SkillInstallItem[]) =>
-  invoke<void>("confirm_git_install", { repoUrl, tempDir, items });
 
-export const cancelGitPreview = (tempDir: string) =>
-  invoke<void>("cancel_git_preview", { tempDir });
 
-export const installFromSkillssh = (source: string, skillId: string) =>
-  invoke<void>("install_from_skillssh", { source, skillId });
 
-export const cancelInstall = (key: string) =>
-  invoke<boolean>("cancel_install", { key });
 
-export const checkSkillUpdate = (skillId: string, force?: boolean) =>
-  invoke<ManagedSkill>("check_skill_update", {
-    skillId,
-    force: force ?? false,
-  });
 
-export const checkAllSkillUpdates = (force?: boolean) =>
-  invoke<void>("check_all_skill_updates", {
-    force: force ?? false,
-  });
 
-export interface UpdateSkillResult {
-  skill: ManagedSkill;
-  /** False when a monorepo commit didn't touch this skill's subdirectory. */
-  content_changed: boolean;
-}
 
-export const updateSkill = (skillId: string) =>
-  invoke<UpdateSkillResult>("update_skill", { skillId });
 
-export interface BatchUpdateSkillsResult {
-  refreshed: number;
-  unchanged: number;
-  failed: string[];
-}
 
-export const batchUpdateSkills = (skillIds: string[]) =>
-  invoke<BatchUpdateSkillsResult>("batch_update_skills", { skillIds });
 
-export const reimportLocalSkill = (skillId: string) =>
-  invoke<ManagedSkill>("reimport_local_skill", { skillId });
 
-export const relinkLocalSkillSource = (skillId: string, sourcePath: string) =>
-  invoke<ManagedSkill>("relink_local_skill_source", { skillId, sourcePath });
 
-export const detachLocalSkillSource = (skillId: string) =>
-  invoke<ManagedSkill>("detach_local_skill_source", { skillId });
 
-export interface BatchImportResult {
-  imported: number;
-  skipped: number;
-  errors: string[];
-}
 
-export const batchImportFolder = (folderPath: string) =>
-  invoke<BatchImportResult>("batch_import_folder", { folderPath });
 
-export const getAllTags = () => invoke<string[]>("get_all_tags");
 
-export const setSkillTags = (skillId: string, tags: string[]) =>
-  invoke<void>("set_skill_tags", { skillId, tags });
 
-export const renameTag = (oldName: string, newName: string) =>
-  invoke<void>("rename_tag", { oldName, newName });
 
-export const deleteTag = (name: string) =>
-  invoke<void>("delete_tag", { name });
 
 // ── Sync ──
 
-export const syncSkillToTool = (skillId: string, tool: string) =>
-  invoke<void>("sync_skill_to_tool", { skillId, tool });
 
-export const unsyncSkillFromTool = (skillId: string, tool: string) =>
-  invoke<void>("unsync_skill_from_tool", { skillId, tool });
 
-export const getSkillToolToggles = (skillId: string, presetId: string) =>
-  invoke<SkillToolToggle[]>("get_skill_tool_toggles", { skillId, presetId });
 
-export const setSkillToolToggle = (
-  skillId: string,
-  presetId: string,
-  tool: string,
-  enabled: boolean
-) =>
-  invoke<void>("set_skill_tool_toggle", { skillId, presetId, tool, enabled });
 
 // ── Scan ──
 
-export const scanLocalSkills = () => invoke<ScanResult>("scan_local_skills");
 
-export const importExistingSkill = (sourcePath: string, name?: string) =>
-  invoke<void>("import_existing_skill", { sourcePath, name: name || null });
 
-export const importAllDiscovered = () =>
-  invoke<void>("import_all_discovered");
 
 // ── Browse ──
 
-export const fetchLeaderboard = (board: string) =>
-  invoke<SkillsShSkill[]>("fetch_leaderboard", { board });
 
-export const searchSkillssh = (query: string, limit?: number) =>
-  invoke<SkillsShSkill[]>("search_skillssh", {
-    query,
-    limit: limit ?? null,
-  });
 
 // ── Settings ──
 
@@ -499,246 +263,54 @@ export const getWindowGlassStatus = () =>
 
 // ── Git Backup ──
 
-export type GitUpstreamHealth =
-  | "healthy"
-  | "no_remote"
-  | "no_upstream"
-  | "unrelated_histories"
-  | "detached";
 
-export interface GitBackupStatus {
-  is_repo: boolean;
-  remote_url: string | null;
-  branch: string | null;
-  has_changes: boolean;
-  changed_skill_count: number;
-  ahead: number;
-  behind: number;
-  last_commit: string | null;
-  last_commit_time: string | null;
-  current_snapshot_tag: string | null;
-  restored_from_tag: string | null;
-  upstream_health: GitUpstreamHealth;
-}
 
-export interface GitBackupVersion {
-  tag: string;
-  commit: string;
-  message: string;
-  committed_at: string;
-  /** Device name of the machine that made this backup (empty for old commits). */
-  author: string;
-}
 
-export interface GitBackupSizeReport {
-  total_bytes: number;
-  /** `excluded`: oversized and kept out of the backup (§3.6); false = already tracked, warning only. */
-  oversized: { name: string; bytes: number; excluded: boolean }[];
-  skill_limit_bytes: number;
-  repo_warn_bytes: number;
-}
 
-export const gitBackupStatus = () =>
-  invoke<GitBackupStatus>("git_backup_status");
 
-export const gitBackupFetch = () => invoke<void>("git_backup_fetch");
 
-export const gitBackupInit = () => invoke<void>("git_backup_init");
 
-/** Returns the sanitized URL actually configured (credentials moved to the OS keychain). */
-export const gitBackupSetRemote = (url: string) =>
-  invoke<string>("git_backup_set_remote", { url });
 
-/** Strip embedded credentials into the OS keychain; returns the URL safe to persist. */
-export const gitBackupSanitizeRemoteUrl = (url: string) =>
-  invoke<string>("git_backup_sanitize_remote_url", { url });
 
-export interface GithubBackupConnectResult {
-  url: string;
-  login: string;
-  repo_created: boolean;
-  /** False when a pre-existing PUBLIC repository was connected. */
-  repo_private: boolean;
-  remote_has_content: boolean;
-}
 
-/** GitHub guided connect (PAT): validates the token, finds or creates the
- * private backup repo, stores the token in the OS keychain, saves the URL. */
-export const githubBackupConnect = (token: string, repoName: string) =>
-  invoke<GithubBackupConnectResult>("github_backup_connect", { token, repoName });
 
-export interface GithubDeviceFlowStart {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  expires_in: number;
-  interval: number;
-}
 
-export interface GithubDevicePollResult {
-  status: "pending" | "slow_down" | "repository_identified" | "connected";
-  result: GithubBackupConnectResult | null;
-  next_flow: GithubDeviceFlowStart | null;
-  repository_id: number | null;
-}
 
-export const githubDeviceFlowStart = () =>
-  invoke<GithubDeviceFlowStart>("github_device_flow_start");
 
-/** One poll; on authorization the backend completes the whole connect and the
- * OAuth token never reaches the webview. */
-export const githubDeviceFlowPoll = (
-  deviceCode: string,
-  repoName: string,
-  repositoryId: number | null,
-) =>
-  invoke<GithubDevicePollResult>("github_device_flow_poll", {
-    deviceCode,
-    repoName,
-    repositoryId,
-  });
 
-/** Migrate token-in-URL remotes to the OS keychain. Returns the sanitized URL if migrated. */
-export const gitBackupMigrateCredentials = () =>
-  invoke<string | null>("git_backup_migrate_credentials");
 
-export const gitBackupSizeReport = () =>
-  invoke<GitBackupSizeReport>("git_backup_size_report");
 
-/** This machine's device name (§4.3): saved setting or persisted hostname default. */
-export const backupDeviceName = () => invoke<string>("backup_device_name");
 
-/** Rename this device; only affects future backups. Returns the sanitized name. */
-export const backupSetDeviceName = (name: string) =>
-  invoke<string>("backup_set_device_name", { name });
 
-export const gitBackupRemoveRemote = () =>
-  invoke<void>("git_backup_remove_remote");
 
-export const gitBackupCommit = (message: string) =>
-  invoke<void>("git_backup_commit", { message });
 
-export const gitBackupPush = () => invoke<void>("git_backup_push");
 
-export interface MergeUpdatedSkill {
-  skill_id: string;
-  path: string;
-  /** Device (commit author) that last touched this skill on the remote. */
-  from_device: string;
-}
 
-/** Outcome of a sync merge (merge-engine design §8). With the default
- * system engine only `engine` is meaningful. */
-export interface MergeSummary {
-  engine: "object" | "system";
-  up_to_date: boolean;
-  fast_forward: boolean;
-  updated: MergeUpdatedSkill[];
-  kept_local: string[];
-  new_conflicts: string[];
-  pending_total: number;
-  old_client_warning: string | null;
-  legacy_fallback: boolean;
-}
 
-export const gitBackupPull = () => invoke<MergeSummary>("git_backup_pull");
 
-/** Outcome of the one-transaction sync (commit → merge → snapshot → push,
- * with automatic retry when another device pushes concurrently). */
-export interface SyncOutcome {
-  committed: boolean;
-  merge: MergeSummary | null;
-  pushed: boolean;
-  snapshot_tag: string | null;
-}
 
-export const gitBackupSync = (message: string) =>
-  invoke<SyncOutcome>("git_backup_sync", { message });
 
-/** One "needs attention" sync conflict (merge-engine design §4). */
-export interface PendingConflict {
-  skill_id: string;
-  theirs_commit: string;
-  theirs_path: string | null;
-  detected_at: number;
-}
 
-export const gitBackupPendingConflicts = () =>
-  invoke<PendingConflict[]>("git_backup_pending_conflicts");
 
-export type ResolveConflictAction = "keep_local" | "use_remote" | "keep_both";
 
-/** Resolve a pending conflict; returns the safety snapshot tag. */
-export const gitBackupResolveConflict = (
-  skillId: string,
-  action: ResolveConflictAction,
-) => invoke<string>("git_backup_resolve_conflict", { skillId, action });
 
-export const gitBackupClone = (url: string) =>
-  invoke<void>("git_backup_clone", { url });
 
-export const gitBackupReclone = (url: string) =>
-  invoke<void>("git_backup_reclone", { url });
 
-export const gitBackupCreateSnapshot = () =>
-  invoke<string>("git_backup_create_snapshot");
 
-export const gitBackupListVersions = (limit?: number) =>
-  invoke<GitBackupVersion[]>("git_backup_list_versions", {
-    limit: typeof limit === "number" ? limit : null,
-  });
 
-/** Returns the safety-point tag that captured the pre-restore state. */
-export const gitBackupRestoreVersion = (tag: string) =>
-  invoke<string>("git_backup_restore_version", { tag });
 
 // ── Presets ──
 
-export const getPresets = () => invoke<Preset[]>("get_presets");
 
-export const getActivePreset = () =>
-  invoke<Preset | null>("get_active_preset");
 
-export const createPreset = (name: string, description?: string, icon?: string) =>
-  invoke<Preset>("create_preset", {
-    name,
-    description: description || null,
-    icon: icon || null,
-  });
 
-export const updatePreset = (
-  id: string,
-  name: string,
-  description?: string,
-  icon?: string
-) =>
-  invoke<void>("update_preset", {
-    id,
-    name,
-    description: description || null,
-    icon: icon || null,
-  });
 
-export const deletePreset = (id: string) =>
-  invoke<void>("delete_preset", { id });
 
-export const addSkillToPreset = (skillId: string, presetId: string) =>
-  invoke<void>("add_skill_to_preset", { skillId, presetId });
 
-export const removeSkillFromPreset = (skillId: string, presetId: string) =>
-  invoke<void>("remove_skill_from_preset", { skillId, presetId });
 
-export const reorderPresets = (ids: string[]) =>
-  invoke<void>("reorder_presets", { ids });
 
-export const reorderProjects = (ids: string[]) =>
-  invoke<void>("reorder_projects", { ids });
 
-export const getPresetSkillOrder = (presetId: string) =>
-  invoke<string[]>("get_preset_skill_order", { presetId });
 
-export const reorderPresetSkills = (presetId: string, skillIds: string[]) =>
-  invoke<void>("reorder_preset_skills", { presetId, skillIds });
 
 // ── Projects ──
 
@@ -760,52 +332,22 @@ export const removeProject = (id: string) =>
 export const scanProjects = (root: string) =>
   invoke<string[]>("scan_projects", { root });
 
-export const getProjectAgentTargets = (projectId: string) =>
-  invoke<ProjectAgentTarget[]>("get_project_agent_targets", { projectId });
 
-export const getProjectSkills = (projectId: string) =>
-  invoke<ProjectSkill[]>("get_project_skills", { projectId });
 
-export const getProjectSkillDocument = (projectId: string, skillRelativePath: string, agent: string) =>
-  invoke<ProjectSkillDocument>("get_project_skill_document", { projectId, skillRelativePath, agent });
 
-export const importProjectSkillToCenter = (projectId: string, skillRelativePath: string, agent: string) =>
-  invoke<void>("import_project_skill_to_center", { projectId, skillRelativePath, agent });
 
-export const exportSkillToProject = (skillId: string, projectId: string, agents?: string[]) =>
-  invoke<void>("export_skill_to_project", { skillId, projectId, agents: agents ?? null });
 
-export const updateProjectSkillToCenter = (projectId: string, skillRelativePath: string, agent: string) =>
-  invoke<void>("update_project_skill_to_center", { projectId, skillRelativePath, agent });
 
-export const updateProjectSkillFromCenter = (projectId: string, skillRelativePath: string, agent: string) =>
-  invoke<void>("update_project_skill_from_center", { projectId, skillRelativePath, agent });
 
-export const toggleProjectSkill = (projectId: string, skillRelativePath: string, agent: string, enabled: boolean) =>
-  invoke<void>("toggle_project_skill", { projectId, skillRelativePath, agent, enabled });
 
-export const deleteProjectSkill = (projectId: string, skillRelativePath: string, agent: string) =>
-  invoke<void>("delete_project_skill", { projectId, skillRelativePath, agent });
 
-export const slugifySkillNames = (names: string[]) =>
-  invoke<string[]>("slugify_skill_names", { names });
 
 // ── Agent Local Workspace ──
 
-export const getGlobalLocalSkills = (agent: string) =>
-  invoke<ProjectSkill[]>("get_global_local_skills", { agent });
 
-export const getGlobalLocalSkillDocument = (agent: string, skillRelativePath: string) =>
-  invoke<ProjectSkillDocument>("get_global_local_skill_document", { agent, skillRelativePath });
 
-export const importGlobalLocalSkillToCenter = (agent: string, skillRelativePath: string) =>
-  invoke<void>("import_global_local_skill_to_center", { agent, skillRelativePath });
 
-export const updateGlobalLocalSkillFromCenter = (agent: string, skillRelativePath: string) =>
-  invoke<void>("update_global_local_skill_from_center", { agent, skillRelativePath });
 
-export const deleteGlobalLocalSkill = (agent: string, skillRelativePath: string) =>
-  invoke<void>("delete_global_local_skill", { agent, skillRelativePath });
 
 // ── Chain (three-tier links, xw fork) ──
 
@@ -1017,8 +559,6 @@ export const chainPlanLink = (projectPath: string, skillPaths: string[], agents:
 export const chainApplyLink = (plan: ChainLinkPlan) =>
   invoke<ChainApplyOutcome>("chain_apply_link", { plan });
 
-export const chainUnlinkSkill = (projectPath: string, skillName: string) =>
-  invoke<ChainOpResult[]>("chain_unlink_skill", { projectPath, skillName });
 
 /** One previewed unlink action, Agent-scope aware. */
 export interface ChainUnlinkItem {
@@ -1142,18 +682,6 @@ export interface ChainFinding {
 /** The two ways a finding can be classified out of the visible set. */
 export type ChainDecisionKind = "ignored" | "project_private";
 
-/**
- * A persisted decision to hide a Doctor finding, keyed by rule + evidence
- * fingerprint so a materially changed chain is reconsidered.
- */
-export interface ChainFindingDecision {
-  rule: string;
-  fingerprint: string;
-  /** "ignored" (generic accept) | "project_private" (legitimate physical Skill). */
-  kind: ChainDecisionKind;
-  note: string | null;
-  created_at: number;
-}
 
 export interface ChainDoctorReport {
   findings: ChainFinding[];
@@ -1991,6 +1519,7 @@ export interface FleetManifestUpdatePlan {
   manifest: FleetManifest;
   changes: FleetManifestChange[];
 }
+
 
 export interface FleetManifestUpdateOutcome {
   ok: boolean;

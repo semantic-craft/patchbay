@@ -8,10 +8,8 @@ fn decide_preview_reports_item_error_and_exits_nonzero() {
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let config = temp.path().join("config");
-    let skills = temp.path().join("skills");
     std::fs::create_dir_all(&home).unwrap();
     std::fs::create_dir_all(&config).unwrap();
-    std::fs::create_dir_all(&skills).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_patchbay-cli"))
         .env("HOME", &home)
@@ -21,8 +19,6 @@ fn decide_preview_reports_item_error_and_exits_nonzero() {
         .env("LOCALAPPDATA", &config)
         .args([
             "--json",
-            "--skills-root",
-            skills.to_str().unwrap(),
             "chain",
             "decide",
             "--fingerprint",

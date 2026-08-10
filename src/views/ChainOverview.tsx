@@ -393,7 +393,7 @@ export function ChainOverview() {
               return (
                 <button
                   key={agent}
-                  onClick={() => navigate("/chain/projects")}
+                  onClick={() => navigate("/")}
                   title={t("instructions.costBarHint")}
                   className={cn(
                     "font-mono text-[11.5px] outline-none transition-colors hover:text-secondary",

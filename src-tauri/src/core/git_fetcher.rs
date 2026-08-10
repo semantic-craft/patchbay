@@ -1,4 +1,4 @@
-use crate::core::central_repo;
+use crate::core::app_dirs;
 use crate::core::skill_metadata;
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;
@@ -114,7 +114,7 @@ fn repo_cache_dir(url: &str) -> PathBuf {
     hasher.update(canonical.as_bytes());
     let hash = format!("{:x}", hasher.finalize());
     let short = &hash[..16];
-    central_repo::cache_dir().join("repos").join(short)
+    app_dirs::cache_dir().join("repos").join(short)
 }
 
 struct RepoCacheLock {

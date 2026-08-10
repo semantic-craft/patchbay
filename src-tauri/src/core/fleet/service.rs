@@ -15,7 +15,18 @@ use crate::core::fleet::meta_repo::{
 };
 use crate::core::fleet::repo_ops;
 use crate::core::skill_store::SkillStore;
-use crate::core::{central_repo, git_backup, path_guard};
+use crate::core::{app_dirs, path_guard};
+
+/// Fallback machine label when the user has not named this device.
+fn default_device_name() -> String {
+    let host = gethostname::gethostname().to_string_lossy().to_string();
+    let host = host.strip_suffix(".local").unwrap_or(&host).trim().to_string();
+    if host.is_empty() {
+        "My Computer".to_string()
+    } else {
+        host
+    }
+}
 
 pub const MACHINE_ID_KEY: &str = "fleet_machine_id";
 pub const META_URL_KEY: &str = "fleet_meta_url";
@@ -510,7 +521,7 @@ impl<'a> FleetService<'a> {
 
     fn meta_repo(&self) -> Result<MetaRepo, AppError> {
         let url = self.meta_url()?;
-        let cache = central_repo::base_dir().join("fleet").join("meta");
+        let cache = app_dirs::base_dir().join("fleet").join("meta");
         Ok(MetaRepo::at(url, cache))
     }
 
@@ -541,7 +552,7 @@ impl<'a> FleetService<'a> {
     fn display_name(&self) -> Option<String> {
         match self.store.get_setting("backup_device_name") {
             Ok(Some(name)) if !name.trim().is_empty() => Some(name.trim().to_string()),
-            Ok(_) => Some(git_backup::default_device_name()),
+            Ok(_) => Some(default_device_name()),
             Err(_) => None,
         }
     }
@@ -2428,7 +2439,7 @@ impl<'a> FleetService<'a> {
 
 fn expand_tilde(path: &str) -> PathBuf {
     // Both separators: `projects_root` is a per-machine setting, and on Beta
-    // it is typed as `~\Projects`. Matches `central_repo::normalize_path`.
+    // it is typed as `~\Projects`. Matches `app_dirs::normalize_path`.
     if path.starts_with("~/") || path.starts_with("~\\") {
         return dirs::home_dir().unwrap_or_default().join(&path[2..]);
     }
@@ -2672,7 +2683,7 @@ pub(super) struct FleetLock {
 
 impl FleetLock {
     fn open_file() -> Result<std::fs::File, AppError> {
-        let path = central_repo::base_dir().join("fleet.lock");
+        let path = app_dirs::base_dir().join("fleet.lock");
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(AppError::io)?;
         }
@@ -2783,7 +2794,7 @@ mod tests {
     }
 
     fn seed_meta_cache(fx: &Fixture) {
-        let cache = central_repo::base_dir().join("fleet/meta");
+        let cache = app_dirs::base_dir().join("fleet/meta");
         MetaRepo::at(fx.meta_bare.to_str().unwrap(), cache)
             .ensure_fresh()
             .unwrap();
@@ -2972,14 +2983,14 @@ mod tests {
 
     impl Drop for Fixture {
         fn drop(&mut self) {
-            central_repo::set_test_base_dir_override(None);
+            app_dirs::set_test_base_dir_override(None);
         }
     }
 
     fn fixture() -> Fixture {
-        let guard = central_repo::test_base_dir_lock();
+        let guard = app_dirs::test_base_dir_lock();
         let temp = tempdir().unwrap();
-        central_repo::set_test_base_dir_override(Some(temp.path().join("appdata")));
+        app_dirs::set_test_base_dir_override(Some(temp.path().join("appdata")));
 
         let projects = temp.path().join("projects");
         let alpha = projects.join("alpha");
@@ -3842,7 +3853,7 @@ branch = "main"
         std::fs::write(alpha.join("file.txt"), "base").unwrap();
         let index_before = file_stamp(&alpha.join(".git/index")).unwrap();
         let project_fetch_before = file_stamp(&alpha.join(".git/FETCH_HEAD"));
-        let meta_fetch = central_repo::base_dir().join("fleet/meta/.git/FETCH_HEAD");
+        let meta_fetch = app_dirs::base_dir().join("fleet/meta/.git/FETCH_HEAD");
         let meta_fetch_before = file_stamp(&meta_fetch);
         let setting_before = fx.store.get_setting(MACHINE_ID_KEY).unwrap();
 
@@ -4140,7 +4151,7 @@ branch = "main"
     #[test]
     fn push_preview_does_not_refresh_cache_index_or_seed_machine_id() {
         let fx = fixture();
-        let cache = central_repo::base_dir().join("fleet/meta");
+        let cache = app_dirs::base_dir().join("fleet/meta");
         let meta = MetaRepo::at(fx.meta_bare.to_str().unwrap(), cache.clone());
         meta.ensure_fresh().unwrap();
 
@@ -4591,7 +4602,7 @@ branch = "main"
         });
         seed_meta_cache(&fx);
         std::fs::remove_dir_all(&fx.meta_bare).unwrap();
-        let cache = central_repo::base_dir().join("fleet/meta");
+        let cache = app_dirs::base_dir().join("fleet/meta");
         git(&cache, &["checkout", "--detach"]);
         let service = FleetService::new(&fx.store);
         let plan = service.plan_init(&["alpha".to_string()]).unwrap();
@@ -4920,9 +4931,9 @@ branch = "main"
 
     #[test]
     fn machine_id_is_lazily_seeded_from_hostname() {
-        let guard = central_repo::test_base_dir_lock();
+        let guard = app_dirs::test_base_dir_lock();
         let temp = tempdir().unwrap();
-        central_repo::set_test_base_dir_override(Some(temp.path().join("appdata")));
+        app_dirs::set_test_base_dir_override(Some(temp.path().join("appdata")));
         let store = SkillStore::new(&temp.path().join("patchbay.db")).unwrap();
         let service = FleetService::new(&store);
         let id = service.machine_id().unwrap();
@@ -4932,7 +4943,7 @@ branch = "main"
             store.get_setting(MACHINE_ID_KEY).unwrap().as_deref(),
             Some(id.as_str())
         );
-        central_repo::set_test_base_dir_override(None);
+        app_dirs::set_test_base_dir_override(None);
         drop(guard);
     }
 

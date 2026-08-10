@@ -50,7 +50,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { listen } from "@tauri-apps/api/event";
 import { writeText as clipboardWriteText } from "@tauri-apps/plugin-clipboard-manager";
 import { open as dialogOpen, confirm as dialogConfirm } from "@tauri-apps/plugin-dialog";
-import { useNavigate } from "react-router-dom";
 import { cn } from "../utils";
 import { useApp } from "../context/AppContext";
 import { useThemeContext } from "../context/ThemeContext";
@@ -166,12 +165,10 @@ function AgentGroupDnd({ items, sensors, dragLabel, onDragEnd, renderAgentCard }
 
 export function Settings() {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { tools, presets, refreshTools, openHelp } = useApp();
+  const { tools, refreshTools, openHelp } = useApp();
   const [togglingTools, setTogglingTools] = useState<Set<string>>(new Set());
   const { theme, setTheme } = useThemeContext();
   const [syncMode, setSyncMode] = useState("symlink");
-  const [defaultPreset, setDefaultPreset] = useState("");
   const [closeAction, setCloseAction] = useState("");
   const [showTrayIcon, setShowTrayIcon] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -189,9 +186,6 @@ export function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [installing, setInstalling] = useState(false);
-  const [gitEngineGit2, setGitEngineGit2] = useState(false);
-  // Object merge is the default since 3d-β; "system" is the opt-out.
-  const [gitMergeEngineObject, setGitMergeEngineObject] = useState(true);
   const [proxyInput, setProxyInput] = useState("");
   const [proxySaving, setProxySaving] = useState(false);
   const [textSize, setTextSize] = useState("default");
@@ -336,7 +330,6 @@ export function Settings() {
 
   useEffect(() => {
     api.getSettings("sync_mode").then((v) => { if (v) setSyncMode(v); });
-    api.getSettings("default_scenario").then((v) => { if (v) setDefaultPreset(v); });
     api.getSettings("proxy_url").then((v) => { setProxyInput(v ?? ""); });
     api.getSettings("close_action").then((v) => { setCloseAction(v ?? ""); });
     api.getSettings("show_tray_icon").then((v) => {
@@ -362,13 +355,6 @@ export function Settings() {
       setCentralRepoPathInput(path);
     }).catch(() => {});
     api.getCentralRepoPathOverride().then(setCentralRepoPathOverride).catch(() => {});
-
-    api.getSettings("git_backup_engine").then((v) => {
-      setGitEngineGit2(v?.trim() === "git2");
-    }).catch(() => {});
-    api.getSettings("merge_engine").then((v) => {
-      setGitMergeEngineObject((v ?? "").trim() !== "system");
-    }).catch(() => {});
   }, []);
 
   const handleRefresh = async () => {
@@ -407,11 +393,6 @@ export function Settings() {
   const handleSyncModeChange = async (mode: string) => {
     setSyncMode(mode);
     await api.setSettings("sync_mode", mode);
-  };
-
-  const handleDefaultPresetChange = async (id: string) => {
-    setDefaultPreset(id);
-    await api.setSettings("default_scenario", id);
   };
 
   const handleCloseActionChange = async (action: string) => {
@@ -1426,27 +1407,6 @@ export function Settings() {
               </div>
             </div>
 
-            {/* Default preset */}
-            <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <h3 className="text-[13px] text-secondary font-medium mb-0.5">{t("settings.defaultPreset")}</h3>
-                <p className="text-[13px] text-muted">{t("settings.defaultPresetDesc")}</p>
-              </div>
-              <div className="relative shrink-0">
-                <select
-                  value={defaultPreset}
-                  onChange={(e) => handleDefaultPresetChange(e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="">—</option>
-                  {presets.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-              </div>
-            </div>
-
             {/* Language */}
             <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -1668,73 +1628,6 @@ export function Settings() {
                   </button>
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Git sync config */}
-        <section>
-          <h2 className="app-section-title mb-3">
-            {t("settings.gitSyncConfig")}
-          </h2>
-          <div className="app-panel overflow-hidden divide-y divide-border-subtle">
-            <div className="px-4 py-3">
-              <h3 className="text-[13px] text-secondary font-medium mb-0.5">{t("settings.gitEngineSettings")}</h3>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[13px] text-muted">{t("settings.gitSyncConfigDesc")}</p>
-                <button
-                  type="button"
-                  onClick={() => navigate("/backup")}
-                  className={`${actionButtonClass} bg-surface-hover hover:bg-surface-active text-tertiary border-border`}
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  {t("settings.openBackupPage")}
-                </button>
-              </div>
-              <label className="mt-3 flex cursor-pointer items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={gitEngineGit2}
-                  onChange={async (e) => {
-                    const next = e.target.checked;
-                    setGitEngineGit2(next);
-                    try {
-                      await api.setSettings("git_backup_engine", next ? "git2" : "system");
-                      toast.success(t("common.success"));
-                    } catch {
-                      setGitEngineGit2(!next);
-                      toast.error(t("common.error"));
-                    }
-                  }}
-                  className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]"
-                />
-                <span className="min-w-0">
-                  <span className="block text-[13px] text-secondary">{t("settings.gitEngineGit2")}</span>
-                  <span className="block text-[12px] text-muted">{t("settings.gitEngineGit2Desc")}</span>
-                </span>
-              </label>
-              <label className="mt-3 flex cursor-pointer items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={gitMergeEngineObject}
-                  onChange={async (e) => {
-                    const next = e.target.checked;
-                    setGitMergeEngineObject(next);
-                    try {
-                      await api.setSettings("merge_engine", next ? "object" : "system");
-                      toast.success(t("common.success"));
-                    } catch {
-                      setGitMergeEngineObject(!next);
-                      toast.error(t("common.error"));
-                    }
-                  }}
-                  className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]"
-                />
-                <span className="min-w-0">
-                  <span className="block text-[13px] text-secondary">{t("settings.gitMergeEngineObject")}</span>
-                  <span className="block text-[12px] text-muted">{t("settings.gitMergeEngineObjectDesc")}</span>
-                </span>
-              </label>
             </div>
           </div>
         </section>

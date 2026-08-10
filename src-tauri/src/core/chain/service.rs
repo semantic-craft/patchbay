@@ -5,7 +5,6 @@ use serde::Serialize;
 
 use crate::core::{
     audit_log::AuditDraft,
-    central_repo,
     error::AppError,
     project_registry,
     skill_store::{ProjectRecord, SkillStore},
@@ -68,30 +67,17 @@ pub struct UnlinkOutcome {
 /// filesystem behavior, structured results, and audit records stay aligned.
 pub struct ChainService<'a> {
     store: &'a SkillStore,
-    managed_root: PathBuf,
 }
 
 impl<'a> ChainService<'a> {
     pub fn new(store: &'a SkillStore) -> Self {
-        Self {
-            store,
-            managed_root: central_repo::skills_dir(),
-        }
+        Self { store }
     }
 
-    #[cfg(test)]
-    fn with_managed_root(store: &'a SkillStore, managed_root: PathBuf) -> Self {
-        Self {
-            store,
-            managed_root,
-        }
-    }
-
-    /// Every allowed tier-1 source: the Patchbay-managed central library plus
-    /// optional developer Git checkouts configured as warehouse roots.
+    /// Every allowed tier-1 source: the developer Git checkouts configured as
+    /// warehouse roots.
     fn source_roots(&self) -> Result<Vec<PathBuf>, AppError> {
-        let mut roots = super::roots::warehouse_roots(self.store)?;
-        roots.push(self.managed_root.clone());
+        let roots = super::roots::warehouse_roots(self.store)?;
         Ok(super::roots::dedupe(&roots))
     }
 
@@ -111,7 +97,6 @@ impl<'a> ChainService<'a> {
         let adapters = tool_adapters::enabled_installed_adapters(self.store);
         Ok(super::build_topology(
             &warehouse_roots,
-            &self.managed_root,
             &projects_root,
             &project_paths,
             &adapters,
@@ -2817,79 +2802,6 @@ mod tests {
 
         assert!(!project.join(".agents").exists());
         assert!(!project.join(".claude").exists());
-    }
-
-    #[test]
-    fn managed_central_skill_links_through_qoderwork_project_surface() {
-        let temp = tempdir().unwrap();
-        let managed_root = temp.path().join("central");
-        let original = managed_root.join("ppt-master");
-        let project = temp.path().join("consumer");
-        fs::create_dir_all(&original).unwrap();
-        fs::create_dir_all(&project).unwrap();
-        fs::write(
-            original.join("SKILL.md"),
-            "---\nname: ppt-master\ndescription: Managed fixture\n---\n",
-        )
-        .unwrap();
-
-        let store = SkillStore::new(&temp.path().join("patchbay.db")).unwrap();
-        let service = ChainService::with_managed_root(&store, managed_root.clone());
-        let outcome = service
-            .link(&project, &[original.clone()], &["qoderwork".to_string()])
-            .unwrap();
-
-        assert!(outcome.verified);
-        assert_eq!(outcome.observed, ["ppt-master"]);
-        let aggregate = project.join(".agents/skills/ppt-master");
-        let qoderwork = project.join(".qoder/skills");
-        assert_eq!(
-            crate::core::chain::link_tracer::normalize(std::path::Path::new(
-                &crate::core::chain::link_tracer::trace(&aggregate).final_target,
-            )),
-            crate::core::chain::link_tracer::normalize(&original)
-        );
-        assert_eq!(
-            crate::core::chain::link_tracer::normalize(std::path::Path::new(
-                &crate::core::chain::link_tracer::trace(&qoderwork).final_target,
-            )),
-            crate::core::chain::link_tracer::normalize(&project.join(".agents").join("skills"))
-        );
-
-        let topology = service.scan().unwrap();
-        let central = topology
-            .repos
-            .iter()
-            .find(|source| source.source_kind == "managed")
-            .expect("managed source should be visible");
-        assert_eq!(central.name, "Patchbay Central");
-        assert!(central
-            .skills
-            .iter()
-            .any(|skill| skill.name == "ppt-master"));
-        assert_eq!(central.referenced_by.len(), 1);
-        let project_chain = topology
-            .projects
-            .iter()
-            .find(|candidate| candidate.path == project.to_string_lossy())
-            .unwrap();
-        let entry = project_chain
-            .agents_dir
-            .as_ref()
-            .unwrap()
-            .entries
-            .iter()
-            .find(|entry| entry.name == "ppt-master")
-            .unwrap();
-        assert_eq!(entry.status, "link_repo");
-        assert_eq!(entry.repo.as_deref(), Some("Patchbay Central"));
-        let surface = project_chain
-            .surfaces
-            .iter()
-            .find(|surface| surface.agent == "qoderwork")
-            .unwrap();
-        assert_eq!(surface.kind, "dir_link");
-        assert!(surface.dir_link_ok);
     }
 
     /// Two-phase flow: previewing writes nothing; applying the preview creates

@@ -43,14 +43,14 @@ fn git_stdout(dir: &Path, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_string()
 }
 
-fn run_cli(home: &Path, config: &Path, skills: &Path, args: &[&str]) -> Output {
+fn run_cli(home: &Path, config: &Path, _skills: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_patchbay-cli"))
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", config)
         .env("USERPROFILE", home)
         .env("APPDATA", config)
         .env("LOCALAPPDATA", config)
-        .args(["--json", "--skills-root", skills.to_str().unwrap()])
+        .args(["--json"])
         .args(args)
         .output()
         .unwrap()
@@ -124,7 +124,7 @@ branch = "main"
     git(&meta_seed, &["commit", "-m", "seed manifest"]);
     git(&meta_seed, &["push", "origin", "main"]);
 
-    let initialized = run_cli(&home, &config, &skills, &["repo", "status"]);
+    let initialized = run_cli(&home, &config, &skills, &["status"]);
     assert!(initialized.status.success());
     let repo_status: Value = serde_json::from_slice(&initialized.stdout).unwrap();
     let db_path = PathBuf::from(repo_status["db_path"].as_str().unwrap());
