@@ -20,7 +20,11 @@ use crate::core::{app_dirs, path_guard};
 /// Fallback machine label when the user has not named this device.
 fn default_device_name() -> String {
     let host = gethostname::gethostname().to_string_lossy().to_string();
-    let host = host.strip_suffix(".local").unwrap_or(&host).trim().to_string();
+    let host = host
+        .strip_suffix(".local")
+        .unwrap_or(&host)
+        .trim()
+        .to_string();
     if host.is_empty() {
         "My Computer".to_string()
     } else {

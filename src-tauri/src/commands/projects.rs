@@ -421,4 +421,3 @@ pub async fn scan_projects(
     })
     .await?
 }
-

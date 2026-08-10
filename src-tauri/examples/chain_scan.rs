@@ -27,12 +27,8 @@ fn main() {
         .collect();
 
     let adapters = app_lib::core::tool_adapters::default_tool_adapters();
-    let topo = app_lib::core::chain::build_topology(
-        &[warehouse],
-        &projects,
-        &project_paths,
-        &adapters,
-    );
+    let topo =
+        app_lib::core::chain::build_topology(&[warehouse], &projects, &project_paths, &adapters);
 
     println!("== roots ==");
     for root in &topo.warehouse_roots {

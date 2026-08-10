@@ -424,12 +424,7 @@ mod guard_tests {
         make_skill(&surface.join("leaked"), "leaked");
         let adapter = adapter_pinned_to("claude_code", &surface);
 
-        let topo = build_topology(
-            std::slice::from_ref(&warehouse),
-            &projects,
-            &[],
-            &[adapter],
-        );
+        let topo = build_topology(std::slice::from_ref(&warehouse), &projects, &[], &[adapter]);
         let guarded = only_surface(topo.guard);
         assert_eq!(guarded.state, "violation");
         assert_eq!(guarded.violations[0].skill, "leaked");

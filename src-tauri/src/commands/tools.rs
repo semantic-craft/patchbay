@@ -167,8 +167,7 @@ pub async fn set_custom_tool_path(
 
         let new_adapter = tool_adapters::find_adapter_with_store(&store, &key)
             .ok_or_else(|| AppError::not_found(format!("Unknown tool: {key}")))?;
-        if old_skills_dir != new_adapter.skills_dir() {
-        }
+        if old_skills_dir != new_adapter.skills_dir() {}
         Ok(())
     })
     .await?
@@ -191,8 +190,7 @@ pub async fn reset_custom_tool_path(
 
         let new_adapter = tool_adapters::find_adapter_with_store(&store, &key)
             .ok_or_else(|| AppError::not_found(format!("Unknown tool: {key}")))?;
-        if old_skills_dir != new_adapter.skills_dir() {
-        }
+        if old_skills_dir != new_adapter.skills_dir() {}
         Ok(())
     })
     .await?

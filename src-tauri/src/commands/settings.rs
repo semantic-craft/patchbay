@@ -3,9 +3,7 @@ use std::process::Command;
 use std::sync::Arc;
 use tauri::{Manager, State};
 
-use crate::core::{
-    app_dirs, error::AppError, http, log_sanitize, skill_store::SkillStore,
-};
+use crate::core::{app_dirs, error::AppError, http, log_sanitize, skill_store::SkillStore};
 
 #[derive(serde::Serialize)]
 pub struct AppUpdateInfo {

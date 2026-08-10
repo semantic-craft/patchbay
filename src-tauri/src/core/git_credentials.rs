@@ -290,5 +290,4 @@ mod tests {
         // No secrets baked into the script itself.
         assert!(!ASKPASS_SCRIPT.contains("token"));
     }
-
 }

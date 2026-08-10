@@ -324,8 +324,6 @@ pub fn run() {
             // is inert by default and yields immediately to manual fleet work.
             core::fleet::auto_round::start(app.handle().clone(), store_for_setup.clone());
 
-
-
             // Intercept window close — let frontend decide (close vs hide to tray)
             // When QUITTING is set, allow the close to proceed so the process fully exits.
             let step = Instant::now();

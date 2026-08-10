@@ -1,7 +1,7 @@
 //! Opt-in P2 fleet automatic rounds.
 
-use crate::core::audit_log::AuditDraft;
 use crate::core::app_dirs;
+use crate::core::audit_log::AuditDraft;
 use crate::core::error::AppError;
 use crate::core::fleet::manifest;
 use crate::core::fleet::service::{FleetLock, FleetService};
