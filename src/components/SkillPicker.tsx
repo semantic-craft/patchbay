@@ -6,7 +6,7 @@ import { cn } from "../utils";
 import type { ChainPreset, ChainRepo } from "../lib/tauri";
 
 /** The Agent surfaces a chain link can enter through — the shared list the
- * link dialog and the onboarding wizard both offer. */
+ * link editor and the onboarding wizard both offer. */
 export const CHAIN_AGENTS = ["claude", "codex", "copilot", "opencode", "qoderwork"] as const;
 
 interface SkillPickerProps {
@@ -14,32 +14,51 @@ interface SkillPickerProps {
   /** Selected Original paths — the exact values `chain_plan_link` consumes. */
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
+  /** Original paths the project already links. Rendered as the baseline the
+   * selection is a diff against; empty for a project with no chain yet. */
+  linked?: Set<string>;
   /** Preset 起步 pills（#35 套装）；缺省或空列表时不渲染该行。 */
   presets?: ChainPreset[];
 }
 
 /**
- * 套装挑选组件（#26 决策：向导与「＋ 链接技能」共用）：按 Preset 起步 pills +
- * 搜索 + 按仓库分组的技能勾选列表。只管「选了哪些原件路径」——agent 面与
- * plan/apply 归调用方。
+ * The Skill whitelist editor: which Originals this project exposes.
+ *
+ * It is a two-pane inventory rather than a flat add-only checklist. The left
+ * rail is the source repositories — the browsing job that used to require
+ * leaving for a separate area — and the right pane is their Skills with the
+ * project's CURRENT selection already checked. That is the point: the picker
+ * shows state, so unchecking is how you remove a Skill, and the whitelist has
+ * exactly one screen instead of an add dialog plus a remove table.
  */
-export function SkillPicker({ repos, selected, onChange, presets = [] }: SkillPickerProps) {
+export function SkillPicker({
+  repos,
+  selected,
+  onChange,
+  linked = new Set(),
+  presets = [],
+}: SkillPickerProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
+  // null = every repository. The rail narrows the right pane; it never
+  // changes the selection, so scoping can never silently drop a choice.
+  const [scope, setScope] = useState<string | null>(null);
+
+  const linkedCount = useMemo(
+    () => (repo: ChainRepo) => repo.skills.filter((skill) => selected.has(skill.path)).length,
+    [selected],
+  );
 
   const groups = useMemo(() => {
     const q = search.trim().toLowerCase();
     return repos
+      .filter((repo) => scope === null || repo.path === scope)
       .map((repo) => ({
         repo: repo.name,
-        root: repo.root,
-        skills: repo.skills.filter((s) => !q || s.name.toLowerCase().includes(q)),
+        skills: repo.skills.filter((skill) => !q || skill.name.toLowerCase().includes(q)),
       }))
-      .filter((g) => g.skills.length > 0);
-  }, [repos, search]);
-
-  // Only worth labeling a Skill's source root when more than one root feeds the picker.
-  const multiRoot = useMemo(() => new Set(repos.map((r) => r.root)).size > 1, [repos]);
+      .filter((group) => group.skills.length > 0);
+  }, [repos, search, scope]);
 
   // 当前来源里真实存在的原件路径——Preset 引用按它裁剪。
   const available = useMemo(
@@ -125,39 +144,115 @@ export function SkillPicker({ repos, selected, onChange, presets = [] }: SkillPi
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border-subtle">
-        {groups.map((group) => (
-          <div key={group.repo}>
-            <div className="sticky top-0 bg-bg-secondary px-3 py-1.5 font-mono text-[11px] font-semibold text-muted">
-              {group.repo}
-              {multiRoot && (
-                <span className="ml-2 font-sans font-normal text-faint">
-                  {t("chain.rootSource", {
-                    name: group.root.split("/").pop() || group.root,
-                  })}
-                </span>
-              )}
+      <div className="flex min-h-0 flex-1 gap-2">
+        {/* Source rail: the repository inventory, in the picker instead of in a
+            separate area you had to leave the decision to visit. */}
+        <div
+          data-testid="picker-sources"
+          className="w-[176px] shrink-0 overflow-y-auto rounded-lg border border-border-subtle"
+        >
+          <SourceRow
+            label={t("chain.sourceAll")}
+            count={repos.reduce((total, repo) => total + linkedCount(repo), 0)}
+            active={scope === null}
+            onClick={() => setScope(null)}
+          />
+          {repos.map((repo) => (
+            <SourceRow
+              key={repo.path}
+              data-testid="picker-source"
+              label={repo.name}
+              count={linkedCount(repo)}
+              dirty={repo.health.dirty}
+              active={scope === repo.path}
+              onClick={() => setScope(scope === repo.path ? null : repo.path)}
+            />
+          ))}
+          {repos.length === 0 && (
+            <div className="px-3 py-6 text-center text-[12px] text-muted">
+              {t("chain.workbench.wizardNoSources")}
             </div>
-            {group.skills.map((skill) => (
-              <label
-                key={skill.path}
-                className="flex cursor-pointer items-center gap-2.5 border-t border-border-subtle px-3 py-1.5 hover:bg-surface-hover"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(skill.path)}
-                  onChange={() => toggleSkill(skill.path)}
-                  className="accent-current"
-                />
-                <span className="font-mono text-[12px] text-secondary">{skill.name}</span>
-              </label>
-            ))}
-          </div>
-        ))}
-        {groups.length === 0 && (
-          <div className="px-3 py-6 text-center text-[12.5px] text-muted">—</div>
-        )}
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border-subtle">
+          {groups.map((group) => (
+            <div key={group.repo}>
+              <div className="sticky top-0 bg-bg-secondary px-3 py-1.5 font-mono text-[11px] font-semibold text-muted">
+                {group.repo}
+              </div>
+              {group.skills.map((skill) => {
+                const checked = selected.has(skill.path);
+                const wasLinked = linked.has(skill.path);
+                return (
+                  <label
+                    key={skill.path}
+                    data-testid="picker-skill"
+                    data-changed={checked !== wasLinked ? (checked ? "add" : "remove") : undefined}
+                    className="flex cursor-pointer items-center gap-2.5 border-t border-border-subtle px-3 py-1.5 hover:bg-surface-hover"
+                  >
+                    <input
+                      type="checkbox"
+                      // Named explicitly: the row also carries a change badge,
+                      // which would otherwise leak into the accessible name.
+                      aria-label={skill.name}
+                      checked={checked}
+                      onChange={() => toggleSkill(skill.path)}
+                      className="accent-current"
+                    />
+                    <span className="font-mono text-[12px] text-secondary">{skill.name}</span>
+                    {checked !== wasLinked && (
+                      <span
+                        className={cn(
+                          "ml-auto rounded-full border px-1.5 py-px text-[10.5px] font-medium",
+                          checked
+                            ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+                            : "border-red-500/25 bg-red-500/10 text-red-400",
+                        )}
+                      >
+                        {t(checked ? "chain.willLink" : "chain.willUnlink")}
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          ))}
+          {groups.length === 0 && (
+            <div className="px-3 py-6 text-center text-[12.5px] text-muted">—</div>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function SourceRow({
+  label,
+  count,
+  dirty,
+  active,
+  onClick,
+  ...rest
+}: {
+  label: string;
+  count: number;
+  dirty?: boolean;
+  active: boolean;
+  onClick: () => void;
+} & Record<string, unknown>) {
+  return (
+    <button
+      {...rest}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-1.5 border-b border-border-subtle px-2.5 py-1.5 text-left text-[12px] outline-none last:border-b-0 transition-colors",
+        active ? "bg-surface-active text-secondary" : "text-muted hover:bg-surface-hover",
+      )}
+    >
+      {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
+      <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
+      {count > 0 && <span className="shrink-0 tabular-nums text-[11px] text-accent">{count}</span>}
+    </button>
   );
 }

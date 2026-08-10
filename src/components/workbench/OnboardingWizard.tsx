@@ -16,43 +16,24 @@ interface OnboardingWizardProps {
 }
 
 const STEP_KEYS = [
-  "chain.workbench.wizardStepSource",
   "chain.workbench.wizardStepSkills",
   "chain.workbench.wizardStepEntry",
 ] as const;
 
 /**
- * 新项目三步接入向导（#36，原型 S6）：选来源 → 挑技能（Preset 起步）→
- * 建入口（勾选 agent 面）。终点汇总「将创建 N 条软链 + 入口」，确认后一次
- * `chain_plan_link` + `chain_apply_link` 批量落地——入口目录链由既有引擎在
- * agent 面缺失时自动规划，向导不带私有写路径。
+ * 新项目接入向导（#36，原型 S6）：挑技能（Preset 起步）→ 建入口。终点汇总
+ * 「将创建 N 条软链 + 入口」，确认后一次 `chain_plan_link` + `chain_apply_link`
+ * 批量落地——入口目录链由既有引擎在 agent 面缺失时自动规划。
+ *
+ * 「选来源」原本是独立的第一步，现在是挑技能面板里的来源栏 —— 同一个决定不
+ * 该分成两屏，收窄来源也不再会悄悄丢掉已勾选的技能。
  */
 export function OnboardingWizard({ projectPath, repos, presets, onDone }: OnboardingWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
-  // 来源默认全选：常见形态是仓库不多、全都要看。
-  const [sources, setSources] = useState<Set<string>>(
-    () => new Set(repos.map((repo) => repo.path)),
-  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<Set<string>>(new Set(["claude", "codex"]));
   const [busy, setBusy] = useState(false);
-
-  const scopedRepos = repos.filter((repo) => sources.has(repo.path));
-
-  const toggleSource = (path: string) => {
-    const next = new Set(sources);
-    if (next.has(path)) next.delete(path);
-    else next.add(path);
-    setSources(next);
-    // 收窄来源后，已勾选但不再可见的技能同步剔除——汇总数不撒谎。
-    const visible = new Set(
-      repos
-        .filter((repo) => next.has(repo.path))
-        .flatMap((repo) => repo.skills.map((skill) => skill.path)),
-    );
-    setSelected((cur) => new Set([...cur].filter((path) => visible.has(path))));
-  };
 
   const toggleAgent = (agent: string) => {
     const next = new Set(agents);
@@ -81,12 +62,12 @@ export function OnboardingWizard({ projectPath, repos, presets, onDone }: Onboar
     }
   };
 
-  const nextDisabled =
-    (step === 0 && sources.size === 0) || (step === 1 && selected.size === 0);
+  const lastStep = STEP_KEYS.length - 1;
+  const nextDisabled = step === 0 && selected.size === 0;
 
   return (
     <div data-testid="onboarding-wizard" className="app-glass-card overflow-hidden">
-      {/* 三步进度条 */}
+      {/* 步骤进度条 */}
       <div className="flex items-center border-b border-glass-hairline px-4 py-3">
         {STEP_KEYS.map((key, index) => (
           <div key={key} className="flex items-center">
@@ -116,46 +97,15 @@ export function OnboardingWizard({ projectPath, repos, presets, onDone }: Onboar
       {/* 步骤体 */}
       <div className="flex max-h-[46vh] flex-col p-4">
         {step === 0 && (
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border-subtle">
-            {repos.map((repo) => (
-              <label
-                key={repo.path}
-                data-testid="wizard-source"
-                className="flex cursor-pointer items-center gap-2.5 border-b border-border-subtle px-3 py-2 last:border-b-0 hover:bg-surface-hover"
-              >
-                <input
-                  type="checkbox"
-                  checked={sources.has(repo.path)}
-                  onChange={() => toggleSource(repo.path)}
-                  className="accent-current"
-                />
-                <span className="font-mono text-[12px] text-secondary">{repo.name}</span>
-                <span className="text-[11px] text-faint">
-                  {t("chain.workbench.wizardSourceSkills", { count: repo.skills.length })}
-                </span>
-                <span className="ml-auto break-all font-mono text-[10.5px] text-faint">
-                  {repo.root}
-                </span>
-              </label>
-            ))}
-            {repos.length === 0 && (
-              <div className="px-3 py-6 text-center text-[12.5px] text-muted">
-                {t("chain.workbench.wizardNoSources")}
-              </div>
-            )}
-          </div>
-        )}
-
-        {step === 1 && (
           <SkillPicker
-            repos={scopedRepos}
+            repos={repos}
             selected={selected}
             onChange={setSelected}
             presets={presets}
           />
         )}
 
-        {step === 2 && (
+        {step === 1 && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[12px] text-muted">{t("chain.agentsLabel")}</span>
@@ -189,9 +139,8 @@ export function OnboardingWizard({ projectPath, repos, presets, onDone }: Onboar
       {/* 页脚：汇总 + 前后导航 */}
       <div className="flex items-center gap-3 border-t border-glass-hairline px-4 py-3">
         <span data-testid="wizard-summary" className="text-[12px] text-muted">
-          {step === 0 && t("chain.workbench.wizardSourceSummary", { count: sources.size })}
-          {step === 1 && t("chain.workbench.wizardSkillsSummary", { count: selected.size })}
-          {step === 2 &&
+          {step === 0 && t("chain.workbench.wizardSkillsSummary", { count: selected.size })}
+          {step === 1 &&
             t("chain.workbench.wizardEntrySummary", {
               count: selected.size,
               agents: agents.size,
@@ -207,7 +156,7 @@ export function OnboardingWizard({ projectPath, repos, presets, onDone }: Onboar
               {t("chain.workbench.wizardBack")}
             </button>
           )}
-          {step < 2 ? (
+          {step < lastStep ? (
             <button
               data-testid="wizard-next"
               onClick={() => setStep(step + 1)}

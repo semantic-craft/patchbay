@@ -1,17 +1,28 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X, Link2, ArrowLeft, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { cn } from "../utils";
-import { chainPlanLink, chainApplyLink } from "../lib/tauri";
-import type { ChainApplyOutcome, ChainLinkPlan, ChainPreset, ChainRepo } from "../lib/tauri";
+import {
+  chainApplyLink,
+  chainApplyUnlink,
+  chainPlanLink,
+  chainPlanUnlink,
+} from "../lib/tauri";
+import type {
+  ChainLinkPlan,
+  ChainPreset,
+  ChainProject,
+  ChainRepo,
+  ChainUnlinkPlan,
+} from "../lib/tauri";
 import { TONE_BADGE } from "../lib/chainUi";
 import { CHAIN_AGENTS, SkillPicker } from "./SkillPicker";
 
 interface Props {
   open: boolean;
-  projectName: string;
-  projectPath: string;
+  /** The project whose whitelist is being edited; null while closed. */
+  project: ChainProject | null;
   repos: ChainRepo[];
   /** Preset 起步 pills（#36：与接入向导共用同一挑选流程）。 */
   presets?: ChainPreset[];
@@ -56,24 +67,77 @@ function ItemRow({ item }: { item: ItemLike }) {
   );
 }
 
-export function LinkSkillsDialog({ open, projectName, projectPath, repos, presets, onClose, onLinked }: Props) {
+/** The Originals this project currently exposes, by resolved Original path. */
+function linkedPaths(project: ChainProject | null): Set<string> {
+  const paths = new Set<string>();
+  if (!project) return paths;
+  for (const entry of project.agents_dir?.entries ?? []) paths.add(entry.final_target);
+  for (const surface of project.surfaces) {
+    if (surface.kind !== "per_entry") continue;
+    for (const entry of surface.entries) paths.add(entry.final_target);
+  }
+  return paths;
+}
+
+/** The Agents this project already exposes Skills through — the honest default
+ * for an edit, instead of a hardcoded pair that silently skips the rest. */
+function currentAgents(project: ChainProject | null): Set<string> {
+  const agents = new Set<string>();
+  for (const surface of project?.surfaces ?? []) {
+    if (surface.kind !== "absent") agents.add(surface.agent);
+  }
+  return agents.size > 0 ? agents : new Set(["claude", "codex"]);
+}
+
+interface Preview {
+  link: ChainLinkPlan | null;
+  unlink: ChainUnlinkPlan[];
+}
+
+/**
+ * Edit one project's Skill whitelist.
+ *
+ * It replaced an add-only dialog whose checkboxes were always empty even for a
+ * project with 36 Skills already linked — so the whitelist could be added to
+ * here but only removed from a table elsewhere. The picker now opens on the
+ * project's current selection and the confirm step previews the difference in
+ * both directions before anything is written.
+ */
+export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLinked }: Props) {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [agents, setAgents] = useState<Set<string>>(new Set(["claude", "codex"]));
+  const linked = useMemo(() => linkedPaths(project), [project]);
+  // Seeded from the project's current whitelist. The caller keys this dialog by
+  // project path, so opening it on another project mounts a fresh editor rather
+  // than syncing state in an effect — and a background rescan can never wipe
+  // edits in progress.
+  const [selected, setSelected] = useState<Set<string>>(linked);
+  const [agents, setAgents] = useState<Set<string>>(() => currentAgents(project));
   const [loading, setLoading] = useState(false);
-  const [plan, setPlan] = useState<ChainLinkPlan | null>(null);
-  const [outcome, setOutcome] = useState<ChainApplyOutcome | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [applied, setApplied] = useState<{ verified: boolean; items: ItemLike[] } | null>(null);
 
-  if (!open) return null;
+  const added = useMemo(
+    () => [...selected].filter((path) => !linked.has(path)),
+    [selected, linked],
+  );
+  // Removals are named by Skill, because that is what unlink takes; only
+  // Originals still present in the inventory can be identified this way.
+  const removed = useMemo(() => {
+    const byPath = new Map<string, string>();
+    for (const repo of repos) {
+      for (const skill of repo.skills) byPath.set(skill.path, skill.name);
+    }
+    return [...linked]
+      .filter((path) => !selected.has(path))
+      .map((path) => byPath.get(path))
+      .filter((name): name is string => Boolean(name));
+  }, [selected, linked, repos]);
 
-  const reset = () => {
-    setSelected(new Set());
-    setPlan(null);
-    setOutcome(null);
-  };
+  if (!open || !project) return null;
 
   const handleClose = () => {
-    reset();
+    setPreview(null);
+    setApplied(null);
     onClose();
   };
 
@@ -84,12 +148,17 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
     setAgents(next);
   };
 
-  // Step 1 -> 2: build a read-only preview of every target, action, and conflict.
-  const preview = async () => {
-    if (selected.size === 0 || agents.size === 0) return;
+  // Step 1 → 2: a read-only preview of the whole change set, both directions.
+  const buildPreview = async () => {
+    if (added.length === 0 && removed.length === 0) return;
     setLoading(true);
     try {
-      setPlan(await chainPlanLink(projectPath, [...selected], [...agents]));
+      const link = added.length > 0 ? await chainPlanLink(project.path, added, [...agents]) : null;
+      const unlink: ChainUnlinkPlan[] = [];
+      for (const name of removed) {
+        unlink.push(await chainPlanUnlink(project.path, name, []));
+      }
+      setPreview({ link, unlink });
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -97,19 +166,27 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
     }
   };
 
-  // Step 2 -> 3: apply the exact plan; the backend refuses anything that changed
-  // and only reports success after a rescan observes the chain.
+  // Step 2 → 3: apply exactly what was previewed. Links first, so a Skill that
+  // is being repointed rather than dropped never loses access in between.
   const apply = async () => {
-    if (!plan) return;
+    if (!preview) return;
     setLoading(true);
     try {
-      const result = await chainApplyLink(plan);
-      setOutcome(result);
-      if (result.verified) {
-        toast.success(t("chain.applyVerified", { count: result.observed.length }));
-      } else {
-        toast.warning(t("chain.applyUnverified"));
+      const items: ItemLike[] = [];
+      let verified = true;
+      if (preview.link) {
+        const outcome = await chainApplyLink(preview.link);
+        verified = verified && outcome.verified;
+        items.push(...outcome.report.skills, ...outcome.report.entries);
       }
+      for (const plan of preview.unlink) {
+        const outcome = await chainApplyUnlink(plan);
+        verified = verified && outcome.verified;
+        items.push(...outcome.report);
+      }
+      setApplied({ verified, items });
+      if (verified) toast.success(t("chain.applyVerified", { count: items.length }));
+      else toast.warning(t("chain.applyUnverified"));
       onLinked();
     } catch (e) {
       toast.error(String(e));
@@ -118,14 +195,16 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
     }
   };
 
+  const changeCount = added.length + removed.length;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-surface p-5 shadow-2xl">
+      <div className="relative flex max-h-[84vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold text-primary">
             <Link2 className="h-4 w-4 text-accent" />
-            {t("chain.linkDialogTitle", { project: projectName })}
+            {t("chain.linkDialogTitle", { project: project.name })}
           </h2>
           <button
             onClick={handleClose}
@@ -135,8 +214,8 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
           </button>
         </div>
 
-        {/* Step 1: select skills + agent entries */}
-        {!plan && !outcome && (
+        {/* Step 1: edit the whitelist */}
+        {!preview && !applied && (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="text-[12px] text-muted">{t("chain.agentsLabel")}</span>
@@ -154,8 +233,8 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
                   {agent}
                 </button>
               ))}
-              <span className="ml-auto text-[12px] text-muted">
-                {t("chain.selectedCount", { count: selected.size })}
+              <span data-testid="link-diff" className="ml-auto text-[12px] text-muted">
+                {t("chain.changeSummary", { added: added.length, removed: removed.length })}
               </span>
             </div>
 
@@ -163,6 +242,7 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
               repos={repos}
               selected={selected}
               onChange={setSelected}
+              linked={linked}
               presets={presets}
             />
 
@@ -171,8 +251,9 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
                 {t("common.cancel")}
               </button>
               <button
-                onClick={() => void preview()}
-                disabled={loading || selected.size === 0 || agents.size === 0}
+                data-testid="link-preview"
+                onClick={() => void buildPreview()}
+                disabled={loading || changeCount === 0 || agents.size === 0}
                 className="app-button-primary"
               >
                 {loading ? t("chain.planning") : t("chain.previewPlan")}
@@ -181,43 +262,59 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
           </>
         )}
 
-        {/* Step 2: preview the plan before writing anything */}
-        {plan && !outcome && (
+        {/* Step 2: preview every write before making it */}
+        {preview && !applied && (
           <>
             <div className="mb-2">
               <div className="app-section-title">{t("chain.planTitle")}</div>
               <p className="mt-0.5 text-[12px] text-muted">{t("chain.planHint")}</p>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-lg border border-border-subtle p-3">
-              <div>
-                <div className="app-section-title mb-1.5">{t("chain.resultSkills")}</div>
-                <div className="space-y-1">
-                  {plan.skills.map((item) => (
-                    <ItemRow key={item.path} item={item} />
-                  ))}
-                  {plan.skills.length === 0 && (
-                    <div className="text-[12px] text-muted">—</div>
+              {preview.link && (
+                <>
+                  <div>
+                    <div className="app-section-title mb-1.5">{t("chain.resultSkills")}</div>
+                    <div className="space-y-1">
+                      {preview.link.skills.map((item) => (
+                        <ItemRow key={item.path} item={item} />
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="app-section-title mb-1.5">{t("chain.resultEntries")}</div>
+                    <div className="space-y-1">
+                      {preview.link.entries.map((item) => (
+                        <ItemRow key={item.path} item={item} />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+              {preview.unlink.length > 0 && (
+                <div data-testid="preview-unlink">
+                  <div className="app-section-title mb-1.5">{t("chain.resultRemoved")}</div>
+                  {preview.unlink.some((plan) => plan.shared_surface) && (
+                    <p className="mb-1 text-[11.5px] text-amber-400">
+                      {t("chain.unlinkSharedNotice")}
+                    </p>
                   )}
+                  <div className="space-y-1">
+                    {preview.unlink.flatMap((plan) =>
+                      plan.items.map((item) => (
+                        <ItemRow key={`${plan.skill}:${item.path}`} item={item} />
+                      )),
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="app-section-title mb-1.5">{t("chain.resultEntries")}</div>
-                <div className="space-y-1">
-                  {plan.entries.map((item) => (
-                    <ItemRow key={item.path} item={item} />
-                  ))}
-                  {plan.entries.length === 0 && (
-                    <div className="text-[12px] text-muted">—</div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
             <div className="mt-4 flex justify-between gap-2">
-              <button onClick={() => setPlan(null)} className="app-button-secondary">
+              <button onClick={() => setPreview(null)} className="app-button-secondary">
                 <ArrowLeft className="h-4 w-4" />
                 {t("chain.back")}
               </button>
               <button
+                data-testid="link-apply"
                 onClick={() => void apply()}
                 disabled={loading}
                 className="app-button-primary"
@@ -228,50 +325,32 @@ export function LinkSkillsDialog({ open, projectName, projectPath, repos, preset
           </>
         )}
 
-        {/* Step 3: applied result, with the rescan verdict */}
-        {outcome && (
+        {/* Step 3: what actually happened, per the rescan verdict */}
+        {applied && (
           <>
             <div
               className={cn(
                 "mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px]",
-                outcome.verified
+                applied.verified
                   ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
                   : "border-amber-500/25 bg-amber-500/10 text-amber-400"
               )}
             >
-              {outcome.verified ? (
+              {applied.verified ? (
                 <ShieldCheck className="h-4 w-4" />
               ) : (
                 <ShieldAlert className="h-4 w-4" />
               )}
               <span>
-                {outcome.verified
-                  ? t("chain.applyVerified", { count: outcome.observed.length })
+                {applied.verified
+                  ? t("chain.applyVerified", { count: applied.items.length })
                   : t("chain.applyUnverified")}
               </span>
-              {outcome.missing.length > 0 && (
-                <span className="ml-auto font-mono text-[11px]">
-                  {t("chain.missing", { names: outcome.missing.join(", ") })}
-                </span>
-              )}
             </div>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-              <div>
-                <div className="app-section-title mb-1.5">{t("chain.resultSkills")}</div>
-                <div className="space-y-1">
-                  {outcome.report.skills.map((item) => (
-                    <ItemRow key={item.path} item={item} />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="app-section-title mb-1.5">{t("chain.resultEntries")}</div>
-                <div className="space-y-1">
-                  {outcome.report.entries.map((item) => (
-                    <ItemRow key={item.path} item={item} />
-                  ))}
-                </div>
-              </div>
+            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+              {applied.items.map((item, index) => (
+                <ItemRow key={`${item.path}:${index}`} item={item} />
+              ))}
             </div>
             <div className="mt-4 flex justify-end">
               <button onClick={handleClose} className="app-button-secondary">
