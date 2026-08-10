@@ -441,7 +441,8 @@
         "conflict": "conflict",
         "skip": "skip",
         "error": "error"
-      }
+      },
+      "showMore": "Show {{count}} more"
     },
     "pull": {
       "selected": "Pull {{count}}",
@@ -600,7 +601,8 @@
       "body": "body",
       "missing": "missing",
       "native": "native"
-    }
+    },
+    "residentSummary": "{{count}} entries · {{tokens}} total"
   },
   "help": {
     "eyebrow": "Guide",

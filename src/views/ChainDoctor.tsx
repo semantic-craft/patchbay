@@ -62,6 +62,10 @@ const INSTRUCTIONS_RULES: InstructionsRule[] = [
   "instructions.global_cost",
 ];
 
+/** Rows rendered per page. Findings are unbounded — the instructions rules
+ * alone reach the thousands — so the list grows on demand. */
+const PAGE = 100;
+
 // Deviations Doctor can repair/normalize (issue #10). Others are read-only.
 const REPAIRABLE: ReadonlySet<ChainDeviation> = new Set<ChainDeviation>([
   "broken",
@@ -126,7 +130,16 @@ export function ChainDoctor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Empty set on either axis means "no constraint"; the axes combine with AND.
-  const [sevFilter, setSevFilter] = useState<Set<ChainSeverity>>(new Set());
+  // Severity starts on the actionable half: a real machine reports thousands of
+  // `notice` findings — one rule alone can be 99% of them — and an unfiltered
+  // first paint buries the handful that need a person. The chips are visibly
+  // pressed, and clearing them shows everything.
+  const [sevFilter, setSevFilter] = useState<Set<ChainSeverity>>(
+    () => new Set<ChainSeverity>(["violation", "warning"]),
+  );
+  // How many rows are actually rendered. The list is unbounded in principle,
+  // so it grows on demand instead of mounting thousands of nodes at once.
+  const [visible, setVisible] = useState(PAGE);
   const [devFilter, setDevFilter] = useState<Set<ChainDeviation>>(new Set());
   const [ruleFilter, setRuleFilter] = useState<Set<InstructionsRule>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -261,12 +274,16 @@ export function ChainDoctor() {
     });
   }, [findings, sevFilter, devFilter, ruleFilter]);
 
+  // Any filter change starts the list over from the first page.
   const toggle = <T,>(set: Set<T>, value: T): Set<T> => {
+    setVisible(PAGE);
     const next = new Set(set);
     if (next.has(value)) next.delete(value);
     else next.add(value);
     return next;
   };
+
+  const shown = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
 
   // "Clean" is a first-class outcome only when nothing is visible AND nothing
   // is merely hidden — an all-ignored project shows the Ignored panel instead.
@@ -410,7 +427,7 @@ export function ChainDoctor() {
       )}
 
       <div className="space-y-1.5">
-        {filtered.map((item) => {
+        {shown.map((item) => {
           const key = findingKey(item);
           return (
             <FindingRow
@@ -437,6 +454,18 @@ export function ChainDoctor() {
           );
         })}
       </div>
+
+      {/* Never truncate silently: say how many are held back, and reveal them
+          a page at a time on request. */}
+      {filtered.length > shown.length && (
+        <button
+          data-testid="doctor-more"
+          onClick={() => setVisible((current) => current + PAGE)}
+          className="app-button-secondary self-start"
+        >
+          {t("chain.doctor.showMore", { count: filtered.length - shown.length })}
+        </button>
+      )}
 
       {/* Ignored panel: findings hidden by a persisted decision, each restorable.
           Shown whenever any decision is active, independent of the filters. */}

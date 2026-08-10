@@ -112,6 +112,12 @@ function mockDoctorReports(
   });
 }
 
+/** Clear the default severity filter so every finding is on screen. */
+function showEverySeverity() {
+  fireEvent.click(screen.getByTestId("sev-violation"));
+  fireEvent.click(screen.getByTestId("sev-warning"));
+}
+
 function deviations(): string[] {
   return screen
     .getAllByTestId("finding")
@@ -124,12 +130,33 @@ describe("ChainDoctor", () => {
     mockDoctorReports();
   });
 
+  it("opens on the actionable findings only", async () => {
+    renderWithChain(<ChainDoctor />);
+
+    // Default view: the violations and the warning. `advice` and `notice`
+    // describe intended states and would otherwise bury them.
+    const rows = await screen.findAllByTestId("finding");
+    expect(rows.map((row) => row.getAttribute("data-severity"))).toEqual([
+      "violation",
+      "violation",
+      "warning",
+    ]);
+    // The chips are visibly pressed, so the filtering is not a hidden rule.
+    expect(screen.getByTestId("sev-violation").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("sev-notice").getAttribute("aria-pressed")).toBe("false");
+
+    // Clearing them shows the whole report.
+    showEverySeverity();
+    expect(screen.getAllByTestId("finding")).toHaveLength(5);
+  });
+
   it("renders a populated report and filters by type and severity", async () => {
     renderWithChain(<ChainDoctor />);
 
     // All findings render once the read-only report resolves.
-    const rows = await screen.findAllByTestId("finding");
-    expect(rows).toHaveLength(5);
+    await screen.findAllByTestId("finding");
+    showEverySeverity();
+    expect(screen.getAllByTestId("finding")).toHaveLength(5);
 
     // Filter by deviation type: only the two broken links remain.
     fireEvent.click(screen.getByTestId("dev-broken"));
@@ -148,7 +175,9 @@ describe("ChainDoctor", () => {
     mockDoctorReports(POPULATED, INSTRUCTIONS_POPULATED);
     renderWithChain(<ChainDoctor />);
 
-    expect(await screen.findAllByTestId("finding")).toHaveLength(7);
+    await screen.findAllByTestId("finding");
+    showEverySeverity();
+    expect(screen.getAllByTestId("finding")).toHaveLength(7);
     expect(mockInvoke).toHaveBeenCalledWith("instructions_doctor_report", {
       filter: null,
       project: null,
@@ -198,6 +227,7 @@ describe("ChainDoctor", () => {
   it("reveals the same chain evidence when a finding is opened", async () => {
     renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
+    showEverySeverity();
 
     const directRow = screen
       .getAllByTestId("finding")
@@ -261,6 +291,7 @@ describe("ChainDoctor", () => {
 
     renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
+    showEverySeverity();
 
     const directRow = screen
       .getAllByTestId("finding")
@@ -294,6 +325,7 @@ describe("ChainDoctor", () => {
   it("ignores a finding from its expanded panel", async () => {
     renderWithChain(<ChainDoctor />);
     await screen.findAllByTestId("finding");
+    showEverySeverity();
 
     const directRow = screen
       .getAllByTestId("finding")
