@@ -132,10 +132,7 @@ fn undo_one(item: &RepairItem) -> RepairItem {
             };
             match &current {
                 EntryEvidence::Symlink(target) if Some(target) == item.new_target.as_ref() => {
-                    if let Err(e) = ops::remove_symlink(&path) {
-                        return result(item, "error", None, None, &e.to_string());
-                    }
-                    match ops::make_symlink(Path::new(&old), &path) {
+                    match ops::replace_symlink(Path::new(&old), &path, Path::new(target)) {
                         Ok(()) => result_ok(item, "repoint", Some(target.clone()), Some(old)),
                         Err(e) => result(item, "error", None, None, &e.to_string()),
                     }
@@ -279,6 +276,61 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].action, "repoint");
         assert_eq!(std::fs::read_link(&link).unwrap().to_string_lossy(), old);
+    }
+
+    #[test]
+    fn undo_accepts_the_recorded_absolute_native_target() {
+        let temp = tempdir().unwrap();
+        let project = temp.path().join("proj");
+        let surface = project.join(".claude/skills");
+        let aggregate = project.join(".agents/skills/demo");
+        std::fs::create_dir_all(&surface).unwrap();
+        std::fs::create_dir_all(&aggregate).unwrap();
+        let link = surface.join("demo");
+        symlink(&aggregate, &link).unwrap();
+        let recorded_target = std::fs::read_link(&link).unwrap();
+        let old = temp.path().join("old-target").to_string_lossy().to_string();
+
+        let results = undo(&[item(
+            &project,
+            &link,
+            "repoint_entry",
+            "repoint",
+            Some(&old),
+            Some(recorded_target.to_string_lossy().as_ref()),
+        )]);
+
+        assert_eq!(results[0].action, "repoint");
+        assert_eq!(std::fs::read_link(&link).unwrap().to_string_lossy(), old);
+    }
+
+    #[test]
+    fn undo_preserves_a_lexically_equivalent_link_replaced_after_repair() {
+        let temp = tempdir().unwrap();
+        let project = temp.path().join("proj");
+        let surface = project.join(".claude/skills");
+        let aggregate = project.join(".agents/skills/demo");
+        std::fs::create_dir_all(&surface).unwrap();
+        std::fs::create_dir_all(&aggregate).unwrap();
+        let link = surface.join("demo");
+        symlink(&aggregate, &link).unwrap();
+        let old = temp.path().join("old-target").to_string_lossy().to_string();
+        let record = item(
+            &project,
+            &link,
+            "repoint_entry",
+            "repoint",
+            Some(&old),
+            Some(aggregate.to_string_lossy().as_ref()),
+        );
+
+        crate::core::chain::ops::remove_symlink(&link).unwrap();
+        let replacement = Path::new("../../.agents/skills/demo");
+        symlink(replacement, &link).unwrap();
+        let results = undo(&[record]);
+
+        assert_eq!(results[0].action, "skip");
+        assert_eq!(std::fs::read_link(&link).unwrap(), replacement);
     }
 
     #[test]

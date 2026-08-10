@@ -8,10 +8,10 @@
 //! <project>/<agent surface>/<skill>  ->  <project>/.agents/skills/<skill>  ->  <Original>
 //! ```
 //!
-//! Tier-2 aggregate link `.agents/skills/<skill>` points at the Original with an
-//! ABSOLUTE target; tier-3 per-entry surface link `<surface>/<skill>` points at
-//! the aggregate with the RELATIVE `../../.agents/skills/<skill>` target (the
-//! exact shape [`super::ops::apply_per_skill_entries`] writes). The repair never
+//! Tier-2 aggregate link `.agents/skills/<skill>` points at the Original. Tier-3
+//! per-entry surface link `<surface>/<skill>` points at the aggregate (the plan
+//! carries `../../.agents/skills/<skill>`; Windows materializes the same lexical
+//! destination as an absolute native link). The repair never
 //! moves, copies, or rewrites an Original Skill: it only re-points the links that
 //! route Agent access to it, so the *final* Original a chain resolves to is
 //! always preserved (AC2).
@@ -489,7 +489,15 @@ impl PlanBuilder {
         let relative = relative_aggregate_target(skill);
         let ev = self.observe(entry_path);
         let (action, old_target, message) = match &ev {
-            EntryEvidence::Symlink(target) if *target == relative => {
+            EntryEvidence::Symlink(target)
+                if ops::link_target_matches(
+                    entry_path,
+                    &PathBuf::from(project)
+                        .join(".agents")
+                        .join("skills")
+                        .join(skill),
+                ) && super::link_tracer::native_target_shape_ok(entry_path) =>
+            {
                 ("exists", Some(target.clone()), None)
             }
             EntryEvidence::Symlink(target) => {
@@ -604,7 +612,7 @@ fn create_link(item: &RepairItem, project: &Path, path: &Path) -> RepairItem {
         }
     }
     match ops::make_symlink(Path::new(target), path) {
-        Ok(()) => item.clone(),
+        Ok(()) => with_native_target(item, path),
         Err(e) => refuse(item, "error", &e.to_string()),
     }
 }
@@ -616,13 +624,24 @@ fn repoint_link(item: &RepairItem, path: &Path) -> RepairItem {
     let Some(target) = &item.new_target else {
         return refuse(item, "error", "missing target");
     };
-    if let Err(e) = ops::remove_symlink(path) {
-        return refuse(item, "error", &e.to_string());
-    }
-    match ops::make_symlink(Path::new(target), path) {
-        Ok(()) => item.clone(),
+    let Some(expected) = &item.old_target else {
+        return refuse(item, "error", "missing planned symlink evidence");
+    };
+    match ops::replace_symlink(Path::new(target), path, Path::new(expected)) {
+        Ok(()) => with_native_target(item, path),
         Err(e) => refuse(item, "error", &e.to_string()),
     }
+}
+
+/// Journal the exact native target that was actually written. On Windows this
+/// is absolute even when the plan target was relative, allowing undo to retain
+/// strict raw-evidence ownership checks.
+fn with_native_target(item: &RepairItem, path: &Path) -> RepairItem {
+    let mut result = item.clone();
+    if let Ok(target) = std::fs::read_link(path) {
+        result.new_target = Some(target.to_string_lossy().to_string());
+    }
+    result
 }
 
 /// Reflect an item with a refusal/failure action and message, leaving the rest
@@ -940,16 +959,10 @@ mod tests {
         let surface = f.project.join(".claude").join("skills");
         std::fs::create_dir_all(&surface).unwrap();
         let entry = surface.join("demo-skill");
-        // Built with `join`, matching what a repair actually writes on this OS:
-        // a literal "../../..." would be a POSIX-shaped link that production
-        // never produces on Windows, so the canonicality check would classify
-        // it differently than any real entry.
-        let canonical_rel = Path::new("..")
-            .join("..")
-            .join(".agents")
-            .join("skills")
-            .join("demo-skill");
-        symlink(&canonical_rel, &entry).unwrap();
+        // Windows materializes the planned relative target as this absolute
+        // lexical destination. Repair must recognize it as the same aggregate
+        // layer rather than planning a pointless repoint.
+        symlink(&agg_skill, &entry).unwrap();
         let repo = f.warehouse.join("repo");
 
         let topology = topo_with_repos(&f, vec![repo_with_skill(&repo, "demo-skill", &f.original)]);
@@ -1017,8 +1030,16 @@ mod tests {
         // entry now routes through it to the SAME Original (AC2).
         let agg_skill = f.project.join(".agents/skills/demo-skill");
         assert_eq!(std::fs::read_link(&agg_skill).unwrap(), f.original);
+        let native_target = std::fs::read_link(&entry).unwrap();
+        assert!(super::ops::link_target_matches(
+            &entry,
+            Path::new("../../.agents/skills/demo-skill")
+        ));
+        #[cfg(windows)]
+        assert!(native_target.is_absolute());
+        #[cfg(unix)]
         assert_eq!(
-            std::fs::read_link(&entry).unwrap(),
+            native_target,
             PathBuf::from("../../.agents/skills/demo-skill")
         );
         assert_eq!(final_target(&entry), f.original.to_string_lossy());

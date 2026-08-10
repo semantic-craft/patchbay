@@ -21,6 +21,7 @@ interface Props {
 
 const ACTION_TONE: Record<string, keyof typeof TONE_BADGE> = {
   created: "ok",
+  repaired: "ok",
   exists: "dim",
   removed: "ok",
   absent: "dim",

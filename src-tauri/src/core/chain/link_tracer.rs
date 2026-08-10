@@ -34,6 +34,39 @@ pub fn normalize(path: &Path) -> PathBuf {
     out
 }
 
+/// Resolve a link target against the directory that will contain the link and
+/// return a lexically normalized absolute path. This deliberately does not
+/// canonicalize: following an aggregate Skill link would skip the project
+/// `.agents/skills` layer and collapse the three-tier chain into the Original.
+pub fn absolute_target_for_link(target: &Path, link: &Path) -> std::io::Result<PathBuf> {
+    if target.is_absolute() {
+        return Ok(normalize(target));
+    }
+
+    let parent = link.parent().unwrap_or_else(|| Path::new("."));
+    let absolute_parent = if parent.is_absolute() {
+        parent.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(parent)
+    };
+    Ok(normalize(&absolute_parent.join(target)))
+}
+
+/// Whether an existing link uses the native target shape required by this OS.
+/// Windows chain links are absolute by invariant; Unix deliberately preserves
+/// the caller's relative target spelling.
+pub fn native_target_shape_ok(link: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        std::fs::read_link(link).is_ok_and(|target| target.is_absolute())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = link;
+        true
+    }
+}
+
 pub fn trace(entry: &Path) -> Trace {
     let mut hops = Vec::new();
     let mut current = entry.to_path_buf();
@@ -93,6 +126,53 @@ mod tests {
             normalize(Path::new("/a/b/../c/./d")),
             PathBuf::from("/a/c/d")
         );
+    }
+
+    #[test]
+    fn relative_link_target_becomes_lexically_normalized_absolute_path() {
+        let root = temp_root("absolute-target");
+        let link = root.join("project/.claude/skills");
+
+        assert_eq!(
+            absolute_target_for_link(Path::new("../.agents/./skills"), &link).unwrap(),
+            root.join("project/.agents/skills")
+        );
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn per_skill_target_stays_at_the_aggregate_layer_without_canonicalizing() {
+        let root = temp_root("aggregate-layer");
+        let original = root.join("warehouse/repo/skills/demo");
+        std::fs::create_dir_all(&original).unwrap();
+        let aggregate = root.join("project/.agents/skills/demo");
+        std::fs::create_dir_all(aggregate.parent().unwrap()).unwrap();
+        crate::core::test_support::symlink_dir(&original, &aggregate).unwrap();
+        let surface_entry = root.join("project/.claude/skills/demo");
+
+        assert_eq!(
+            absolute_target_for_link(Path::new("../../.agents/skills/demo"), &surface_entry)
+                .unwrap(),
+            aggregate
+        );
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_relative_native_target_is_never_healthy() {
+        let root = temp_root("relative-native-target");
+        let target = root.join("project/.agents/skills");
+        std::fs::create_dir_all(&target).unwrap();
+        let link = root.join("project/.claude/skills");
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        std::os::windows::fs::symlink_dir(Path::new("../.agents/skills"), &link).unwrap();
+
+        assert!(!native_target_shape_ok(&link));
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

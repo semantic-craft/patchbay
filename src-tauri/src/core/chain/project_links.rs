@@ -152,7 +152,14 @@ fn scan_surface(
     };
     if meta.file_type().is_symlink() {
         let tr = link_tracer::trace(surface_path);
-        let ok = tr.exists && Path::new(&tr.final_target) == agg_abs;
+        // The tracer proves the intended topology lexically, but Windows can
+        // still hold a directory symlink whose native reparse target cannot be
+        // traversed. A healthy tier-3 entry therefore requires a real directory
+        // open through the surface path as well as the expected final target.
+        let ok = tr.exists
+            && Path::new(&tr.final_target) == agg_abs
+            && link_tracer::native_target_shape_ok(surface_path)
+            && std::fs::read_dir(surface_path).is_ok();
         return AgentSurface {
             kind: "dir_link".to_string(),
             dir_link_target: Some(tr.final_target),
@@ -208,6 +215,7 @@ fn scan_entries(
             agg_abs,
             warehouse_roots,
             is_aggregate,
+            link_tracer::native_target_shape_ok(&path),
         );
         out.push(TracedEntry {
             name,
@@ -229,11 +237,15 @@ fn classify(
     agg_abs: &Path,
     warehouse_roots: &[PathBuf],
     is_aggregate: bool,
+    native_target_shape_ok: bool,
 ) -> String {
     if !tr.is_link {
         return if is_aggregate { "private" } else { "copy" }.to_string();
     }
     if !tr.exists || tr.cyclic {
+        return "broken".to_string();
+    }
+    if !native_target_shape_ok {
         return "broken".to_string();
     }
     // A surface entry is canonical when its first hop lands in `.agents/skills`,
@@ -269,9 +281,11 @@ fn repo_for(target: &Path, repos: &[RepoInfo]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::chain::ops;
     /// Portable stand-in for `std::os::unix::fs::symlink`. These fixtures link
     /// directories, and gating the module on unix meant they never ran on
     /// Windows — the platform whose symlink semantics differ most.
+    #[cfg(unix)]
     fn symlink(
         target: impl AsRef<std::path::Path>,
         link: impl AsRef<std::path::Path>,
@@ -303,13 +317,17 @@ mod tests {
         let project = temp.path().join("proj");
         let agg = project.join(".agents").join("skills");
         std::fs::create_dir_all(&agg).unwrap();
-        symlink(&original, agg.join("demo")).unwrap();
+        ops::make_symlink(&original, &agg.join("demo")).unwrap();
 
         let surface = project.join(".claude").join("skills");
         std::fs::create_dir_all(&surface).unwrap();
-        symlink(Path::new("../../.agents/skills/demo"), surface.join("demo")).unwrap();
+        ops::make_symlink(
+            Path::new("../../.agents/skills/demo"),
+            &surface.join("demo"),
+        )
+        .unwrap();
         // A genuinely direct entry (skips the aggregate) must stay "direct".
-        symlink(&original, surface.join("straight")).unwrap();
+        ops::make_symlink(&original, &surface.join("straight")).unwrap();
 
         let chains = discover(&[project.clone()], &[warehouse.clone()], &[]);
         let claude = chains[0]
@@ -329,5 +347,35 @@ mod tests {
         };
         assert_eq!(status("demo"), "via_agents");
         assert_eq!(status("straight"), "direct");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dir_link_is_not_healthy_when_the_surface_cannot_be_traversed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempdir().unwrap();
+        let project = temp.path().join("proj");
+        let agg = project.join(".agents/skills");
+        std::fs::create_dir_all(&agg).unwrap();
+        let surface = project.join(".claude/skills");
+        std::fs::create_dir_all(surface.parent().unwrap()).unwrap();
+        symlink(Path::new("../.agents/skills"), &surface).unwrap();
+
+        let original_mode = std::fs::metadata(&agg).unwrap().permissions().mode();
+        std::fs::set_permissions(&agg, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let traced = link_tracer::trace(&surface);
+        assert!(traced.exists);
+        assert_eq!(Path::new(&traced.final_target), agg);
+
+        let chains = discover(&[project], &[], &[]);
+        let claude = chains[0]
+            .surfaces
+            .iter()
+            .find(|candidate| candidate.agent == "claude")
+            .unwrap();
+        assert!(!claude.dir_link_ok);
+
+        std::fs::set_permissions(&agg, std::fs::Permissions::from_mode(original_mode)).unwrap();
     }
 }

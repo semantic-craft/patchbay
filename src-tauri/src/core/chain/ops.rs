@@ -3,7 +3,7 @@
 //! Linking a Skill into a project is a guarded, two-phase operation:
 //!
 //! * [`plan_link`] inspects the filesystem read-only and returns, per item, the
-//!   target path, the intended action (`created` / `exists` / `conflict` /
+//!   target path, the intended action (`created` / `repaired` / `exists` / `conflict` /
 //!   `error`), the scope, and a snapshot of the current on-disk evidence.
 //! * [`apply_link`] re-validates every boundary from scratch, refuses any item
 //!   whose on-disk evidence changed since the plan (time-of-check/time-of-use
@@ -32,7 +32,7 @@ use crate::core::{path_guard, skill_metadata};
 pub struct OpResult {
     pub name: String,
     pub path: String,
-    /// "created" | "exists" | "removed" | "absent" | "skipped" | "conflict" | "error"
+    /// "created" | "repaired" | "exists" | "removed" | "absent" | "skipped" | "conflict" | "error"
     pub action: String,
     pub message: Option<String>,
 }
@@ -85,7 +85,7 @@ pub struct PlanItem {
     pub name: String,
     /// Absolute path that would be written.
     pub path: String,
-    /// "created" | "exists" | "conflict" | "error"
+    /// "created" | "repaired" | "exists" | "conflict" | "error"
     pub action: String,
     /// Which surface the target belongs to: "aggregate" | "surface".
     pub scope: String,
@@ -119,7 +119,8 @@ pub(super) fn make_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
 
 #[cfg(not(unix))]
 pub(super) fn make_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
-    match std::os::windows::fs::symlink_dir(target, link) {
+    let absolute = link_tracer::absolute_target_for_link(target, link)?;
+    match std::os::windows::fs::symlink_dir(&absolute, link) {
         Ok(()) => Ok(()),
         Err(err) => {
             // Same ladder as `sync_engine::write_target` — missing
@@ -130,14 +131,6 @@ pub(super) fn make_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
             // junction needs no privilege on a local NTFS volume, and std
             // reports mount points as symlinks, so tracing sees it as a link.
             //
-            // `junction::create` demands an absolute target while callers pass
-            // relative ones (the agent surface links to `../.agents/skills`),
-            // so anchor it to the link's own directory first.
-            let absolute = if target.is_absolute() {
-                target.to_path_buf()
-            } else {
-                link.parent().unwrap_or_else(|| Path::new(".")).join(target)
-            };
             // Report the original symlink error: it names the actual privilege
             // problem, where the junction error only says the retry failed.
             junction::create(&absolute, link).map_err(|_| err)
@@ -166,10 +159,222 @@ pub(super) fn remove_symlink(link: &Path) -> std::io::Result<()> {
     std::fs::remove_file(link)
 }
 
+/// Prepare a replacement at a unique sibling, then swap only symlink nodes.
+/// Building away from the public path means a partial junction failure cannot
+/// collide with or delete a concurrently created user node.
+pub(super) fn replace_symlink(
+    target: &Path,
+    link: &Path,
+    expected_raw_target: &Path,
+) -> std::io::Result<()> {
+    replace_symlink_with(target, link, expected_raw_target, make_symlink)
+}
+
+fn replace_symlink_with<F>(
+    target: &Path,
+    link: &Path,
+    expected_raw_target: &Path,
+    create: F,
+) -> std::io::Result<()>
+where
+    F: FnOnce(&Path, &Path) -> std::io::Result<()>,
+{
+    let meta = std::fs::symlink_metadata(link)?;
+    if !meta.file_type().is_symlink() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "refusing to replace a non-symlink",
+        ));
+    }
+    if std::fs::read_link(link)? != expected_raw_target {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "link no longer matches planned symlink evidence",
+        ));
+    }
+
+    let parent = link.parent().unwrap_or_else(|| Path::new("."));
+    let backup = parent.join(format!(".patchbay-relink-{}", uuid::Uuid::new_v4()));
+    let prepared = parent.join(format!(".patchbay-relink-new-{}", uuid::Uuid::new_v4()));
+
+    if let Err(create_error) = create(target, &prepared) {
+        // A partial junction failure can leave an empty directory. Clean only
+        // this uniquely named staging node; the public link has not moved.
+        if create_error.kind() != std::io::ErrorKind::AlreadyExists {
+            let cleanup = match std::fs::symlink_metadata(&prepared) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Ok(meta) if meta.file_type().is_symlink() => remove_symlink(&prepared),
+                Ok(meta) if meta.is_dir() => std::fs::remove_dir(&prepared),
+                Ok(_) => Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    "replacement failure left a non-directory staging node",
+                )),
+                Err(error) => Err(error),
+            };
+            if let Err(cleanup_error) = cleanup {
+                return Err(std::io::Error::new(
+                    create_error.kind(),
+                    format!(
+                        "replacement failed ({create_error}); staging cleanup failed ({cleanup_error}); original link remains at {}; staging node preserved at {}",
+                        link.display(), prepared.display()
+                    ),
+                ));
+            }
+        }
+        return Err(std::io::Error::new(
+            create_error.kind(),
+            format!("replacement failed; original link unchanged: {create_error}"),
+        ));
+    }
+
+    // A changed public node belongs to the other writer; discard only our
+    // prepared link and leave that node untouched.
+    if std::fs::read_link(link).ok().as_deref() != Some(expected_raw_target) {
+        let _ = remove_symlink(&prepared);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "link changed while replacement was being prepared",
+        ));
+    }
+
+    std::fs::rename(link, &backup)?;
+    if std::fs::read_link(&backup).ok().as_deref() != Some(expected_raw_target) {
+        let _ = remove_symlink(&prepared);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "staged link did not match planned evidence; changed node preserved at {}",
+                backup.display()
+            ),
+        ));
+    }
+
+    let prepared_target = std::fs::read_link(&prepared)?;
+    if let Err(install_error) = install_prepared_no_replace(&prepared, link, target) {
+        let restore = if std::fs::symlink_metadata(link)
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        {
+            restore_backup_no_replace(&backup, link, expected_raw_target)
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "public path was concurrently occupied",
+            ))
+        };
+        return Err(std::io::Error::new(
+            install_error.kind(),
+            match restore {
+                Ok(()) => format!(
+                    "replacement install failed; original link restored: {install_error}"
+                ),
+                Err(restore_error) => format!(
+                    "replacement install failed ({install_error}); concurrent node preserved at {}; original link preserved at {}; restore failed: {restore_error}",
+                    link.display(), backup.display()
+                ),
+            },
+        ));
+    }
+
+    if std::fs::read_link(link).ok().as_ref() != Some(&prepared_target) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "installed link changed before verification; original link preserved at {}",
+                backup.display()
+            ),
+        ));
+    }
+    remove_symlink(&backup).map_err(|cleanup_error| {
+        std::io::Error::new(
+            cleanup_error.kind(),
+            format!(
+                "replacement verified but original link cleanup failed; original preserved at {}: {cleanup_error}",
+                backup.display()
+            ),
+        )
+    })
+}
+
+#[cfg(windows)]
+fn install_prepared_no_replace(
+    prepared: &Path,
+    link: &Path,
+    _target: &Path,
+) -> std::io::Result<()> {
+    move_no_replace(prepared, link)
+}
+
+#[cfg(unix)]
+fn install_prepared_no_replace(prepared: &Path, link: &Path, target: &Path) -> std::io::Result<()> {
+    // `symlink` is atomic and fails with AlreadyExists instead of clobbering a
+    // concurrent node. The prepared link only proved creation could succeed.
+    make_symlink(target, link)?;
+    remove_symlink(prepared)
+}
+
+#[cfg(windows)]
+fn restore_backup_no_replace(
+    backup: &Path,
+    link: &Path,
+    _expected_raw_target: &Path,
+) -> std::io::Result<()> {
+    move_no_replace(backup, link)
+}
+
+#[cfg(windows)]
+fn move_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileW;
+
+    let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let destination: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    // MoveFileW has no replace-existing flag: an occupied destination fails.
+    let moved = unsafe { MoveFileW(source.as_ptr(), destination.as_ptr()) };
+    if moved == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn restore_backup_no_replace(
+    backup: &Path,
+    link: &Path,
+    expected_raw_target: &Path,
+) -> std::io::Result<()> {
+    make_symlink(expected_raw_target, link)?;
+    remove_symlink(backup)
+}
+
 /// Does `entry` (a symlink) already resolve to `want`?
 pub(super) fn resolves_to(entry: &Path, want: &Path) -> bool {
     let tr = link_tracer::trace(entry);
     tr.exists && link_tracer::normalize(Path::new(&tr.final_target)) == link_tracer::normalize(want)
+}
+
+/// Does the symlink's own lexical target name `want` when resolved from the
+/// link's parent? Unlike [`resolves_to`], this neither follows another link nor
+/// requires the target to be traversable.
+pub(super) fn link_target_matches(entry: &Path, want: &Path) -> bool {
+    let Some(current) = std::fs::read_link(entry).ok() else {
+        return false;
+    };
+    let Some(current) = link_tracer::absolute_target_for_link(&current, entry).ok() else {
+        return false;
+    };
+    let Some(want) = link_tracer::absolute_target_for_link(want, entry).ok() else {
+        return false;
+    };
+    current == want
+}
+
+fn surface_traversable(surface: &Path) -> bool {
+    std::fs::read_dir(surface).is_ok()
 }
 
 /// Snapshot the on-disk state of a single path without following the final
@@ -331,7 +536,7 @@ fn decide_skill(target: &Path, original: &Path, ev: &EntryEvidence) -> Verdict {
     match ev {
         EntryEvidence::Absent => Verdict::Create,
         EntryEvidence::Symlink(_) => {
-            if resolves_to(target, original) {
+            if resolves_to(target, original) && link_tracer::native_target_shape_ok(target) {
                 Verdict::Exists
             } else {
                 Verdict::Conflict(format!(
@@ -352,7 +557,11 @@ fn decide_skill(target: &Path, original: &Path, ev: &EntryEvidence) -> Verdict {
 fn decide_entry(sentry: &Path, agg_target: &Path, ev: &EntryEvidence) -> Verdict {
     match ev {
         EntryEvidence::Absent => Verdict::Create,
-        EntryEvidence::Symlink(_) if resolves_to(sentry, agg_target) => Verdict::Exists,
+        EntryEvidence::Symlink(_)
+            if resolves_to(sentry, agg_target) && link_tracer::native_target_shape_ok(sentry) =>
+        {
+            Verdict::Exists
+        }
         _ => Verdict::Conflict(String::new()),
     }
 }
@@ -363,6 +572,8 @@ enum SurfaceVerdict {
     Conflict(String),
     /// Absent surface: create the `.claude/skills -> ../.agents/skills` dir link.
     CreateDirLink,
+    /// Correct lexical target, but the native filesystem cannot traverse it.
+    RepairDirLink,
     /// Physical surface: fan out into per-skill entry links.
     PerEntry,
 }
@@ -370,8 +581,13 @@ enum SurfaceVerdict {
 fn decide_surface(surface: &Path, agg: &Path, ev: &EntryEvidence) -> SurfaceVerdict {
     match ev {
         EntryEvidence::Symlink(_) => {
-            if resolves_to(surface, agg) {
+            if link_target_matches(surface, agg)
+                && link_tracer::native_target_shape_ok(surface)
+                && surface_traversable(surface)
+            {
                 SurfaceVerdict::Exists
+            } else if link_target_matches(surface, agg) {
+                SurfaceVerdict::RepairDirLink
             } else {
                 SurfaceVerdict::Conflict(
                     "surface is a symlink but does not resolve to .agents/skills".to_string(),
@@ -504,6 +720,13 @@ pub fn plan_link(
                 "created",
                 "surface",
                 Some("dir link -> ../.agents/skills"),
+            ),
+            SurfaceVerdict::RepairDirLink => plan_item(
+                agent,
+                &surface,
+                "repaired",
+                "surface",
+                Some("relink unreadable dir link -> .agents/skills"),
             ),
             SurfaceVerdict::PerEntry => {
                 let summary =
@@ -700,6 +923,21 @@ pub fn apply_link(plan: &LinkPlan, warehouse_roots: &[PathBuf]) -> Result<LinkRe
                         &surface,
                         "created",
                         "dir link -> ../.agents/skills",
+                    )),
+                    Err(e) => entries.push(with_msg(agent, &surface, "error", e.to_string())),
+                }
+            }
+            SurfaceVerdict::RepairDirLink => {
+                let target = Path::new("..").join(".agents").join("skills");
+                let EntryEvidence::Symlink(expected) = &current else {
+                    unreachable!("repair verdict requires symlink evidence")
+                };
+                match replace_symlink(&target, &surface, Path::new(expected)) {
+                    Ok(()) => entries.push(with_msg(
+                        agent,
+                        &surface,
+                        "repaired",
+                        "relinked unreadable dir link -> .agents/skills",
                     )),
                     Err(e) => entries.push(with_msg(agent, &surface, "error", e.to_string())),
                 }
@@ -1244,6 +1482,11 @@ mod tests {
         let report = apply_fresh(&f, &[f.original.clone()], &["claude".into()]);
         assert_eq!(report.skills[0].action, "created");
         assert_eq!(report.entries[0].action, "created");
+        #[cfg(unix)]
+        assert_eq!(
+            std::fs::read_link(f.project.join(".claude/skills")).unwrap(),
+            Path::new("..").join(".agents").join("skills")
+        );
 
         // A second plan sees "exists"; applying it stays idempotent.
         let report2 = apply_fresh(&f, &[f.original.clone()], &["claude".into()]);
@@ -1258,6 +1501,309 @@ mod tests {
             link_tracer::normalize(Path::new(&tr.final_target)),
             link_tracer::normalize(&f.original)
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_new_chain_uses_absolute_native_targets_and_real_io() {
+        let f = setup();
+        let agents = ["claude", "codex", "copilot", "opencode"]
+            .map(str::to_string)
+            .to_vec();
+        let report = apply_fresh(&f, &[f.original.clone()], &agents);
+        assert!(report.entries.iter().all(|entry| entry.action == "created"));
+
+        let aggregate = f.project.join(".agents/skills/demo-skill");
+        assert!(std::fs::read_link(&aggregate).unwrap().is_absolute());
+        let expected = std::fs::read_to_string(f.original.join("SKILL.md")).unwrap();
+        for rel in [
+            ".claude/skills",
+            ".codex/skills",
+            ".copilot/skills",
+            ".opencode/skills",
+        ] {
+            let surface = f.project.join(rel);
+            assert!(std::fs::read_link(&surface).unwrap().is_absolute());
+            assert_eq!(
+                std::fs::read_to_string(surface.join("demo-skill/SKILL.md")).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_existing_unreadable_relative_surface_is_repaired_and_idempotent() {
+        let f = setup();
+        std::fs::create_dir_all(f.project.join(".agents/skills")).unwrap();
+        make_symlink(&f.original, &f.project.join(".agents/skills/demo-skill")).unwrap();
+        std::fs::create_dir_all(f.project.join(".claude")).unwrap();
+        let surface = f.project.join(".claude/skills");
+        std::os::windows::fs::symlink_dir(Path::new("../.agents/skills"), &surface).unwrap();
+
+        assert!(link_target_matches(
+            &surface,
+            &f.project.join(".agents/skills")
+        ));
+        assert!(std::fs::read_dir(&surface).is_err());
+
+        let plan = plan_link(
+            &f.project,
+            &[f.original.clone()],
+            &["claude".to_string()],
+            &roots(&f),
+        )
+        .unwrap();
+        assert_eq!(plan.entries[0].action, "repaired");
+        let report = apply_link(&plan, &roots(&f)).unwrap();
+        assert_eq!(report.entries[0].action, "repaired");
+        assert!(std::fs::read_link(&surface).unwrap().is_absolute());
+        assert_eq!(
+            std::fs::read_to_string(surface.join("demo-skill/SKILL.md")).unwrap(),
+            std::fs::read_to_string(f.original.join("SKILL.md")).unwrap()
+        );
+
+        let second = plan_link(
+            &f.project,
+            &[f.original.clone()],
+            &["claude".to_string()],
+            &roots(&f),
+        )
+        .unwrap();
+        assert_eq!(second.entries[0].action, "exists");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preview_repairs_a_correctly_targeted_surface_that_cannot_be_traversed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let f = setup();
+        std::fs::create_dir_all(f.project.join(".agents/skills")).unwrap();
+        symlink(&f.original, f.project.join(".agents/skills/demo-skill")).unwrap();
+        std::fs::create_dir_all(f.project.join(".claude")).unwrap();
+        symlink(
+            Path::new("../.agents/skills"),
+            f.project.join(".claude/skills"),
+        )
+        .unwrap();
+
+        let aggregate = f.project.join(".agents/skills");
+        let original_mode = std::fs::metadata(&aggregate).unwrap().permissions().mode();
+        std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(0o000)).unwrap();
+        assert!(link_tracer::trace(&f.project.join(".claude/skills")).exists);
+
+        let plan = plan_link(
+            &f.project,
+            &[f.original.clone()],
+            &["claude".to_string()],
+            &roots(&f),
+        )
+        .unwrap();
+        assert_eq!(plan.entries[0].action, "repaired");
+
+        std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(original_mode))
+            .unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_surface_is_relinked_then_the_second_run_is_idempotent() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let f = setup();
+        std::fs::create_dir_all(f.project.join(".agents/skills")).unwrap();
+        symlink(&f.original, f.project.join(".agents/skills/demo-skill")).unwrap();
+        std::fs::create_dir_all(f.project.join(".claude")).unwrap();
+        let surface = f.project.join(".claude/skills");
+        symlink(Path::new("../.agents/skills"), &surface).unwrap();
+
+        let aggregate = f.project.join(".agents/skills");
+        let original_mode = std::fs::metadata(&aggregate).unwrap().permissions().mode();
+        std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let plan = plan_link(
+            &f.project,
+            &[f.original.clone()],
+            &["claude".to_string()],
+            &roots(&f),
+        )
+        .unwrap();
+        assert_eq!(plan.entries[0].action, "repaired");
+        let report = apply_link(&plan, &roots(&f)).unwrap();
+        assert_eq!(report.entries[0].action, "repaired");
+
+        std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(original_mode))
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(surface.join("demo-skill/SKILL.md")).unwrap(),
+            std::fs::read_to_string(f.original.join("SKILL.md")).unwrap()
+        );
+        let second = plan_link(
+            &f.project,
+            &[f.original.clone()],
+            &["claude".to_string()],
+            &roots(&f),
+        )
+        .unwrap();
+        assert_eq!(second.entries[0].action, "exists");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn changed_surface_evidence_is_preserved_instead_of_repaired() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let f = setup();
+        std::fs::create_dir_all(f.project.join(".agents/skills")).unwrap();
+        symlink(&f.original, f.project.join(".agents/skills/demo-skill")).unwrap();
+        std::fs::create_dir_all(f.project.join(".claude")).unwrap();
+        let surface = f.project.join(".claude/skills");
+        symlink(Path::new("../.agents/skills"), &surface).unwrap();
+
+        let aggregate = f.project.join(".agents/skills");
+        let original_mode = std::fs::metadata(&aggregate).unwrap().permissions().mode();
+        std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let plan = plan_link(
+            &f.project,
+            &[f.original.clone()],
+            &["claude".to_string()],
+            &roots(&f),
+        )
+        .unwrap();
+        assert_eq!(plan.entries[0].action, "repaired");
+
+        std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(original_mode))
+            .unwrap();
+        remove_symlink(&surface).unwrap();
+        let other = f.temp.path().join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        symlink(&other, &surface).unwrap();
+
+        let report = apply_link(&plan, &roots(&f)).unwrap();
+        assert_eq!(report.entries[0].action, "skipped");
+        assert_eq!(std::fs::read_link(&surface).unwrap(), other);
+    }
+
+    #[test]
+    fn replacement_failure_restores_the_original_link_and_target() {
+        let f = setup();
+        let old_target = f.temp.path().join("old-target");
+        std::fs::create_dir_all(&old_target).unwrap();
+        std::fs::write(old_target.join("sentinel"), "keep me").unwrap();
+        let link = f.temp.path().join("surface");
+        symlink(&old_target, &link).unwrap();
+        let expected = std::fs::read_link(&link).unwrap();
+
+        let error = replace_symlink_with(&f.project, &link, &expected, |_target, _link| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "injected create failure",
+            ))
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("original link unchanged"));
+        assert_eq!(std::fs::read_link(&link).unwrap(), old_target);
+        assert_eq!(
+            std::fs::read_to_string(old_target.join("sentinel")).unwrap(),
+            "keep me"
+        );
+    }
+
+    #[test]
+    fn replacement_failure_after_partial_directory_creation_restores_original_link() {
+        let f = setup();
+        let old_target = f.temp.path().join("old-target-partial");
+        std::fs::create_dir_all(&old_target).unwrap();
+        std::fs::write(old_target.join("sentinel"), "keep partial target").unwrap();
+        let link = f.temp.path().join("partial-surface");
+        symlink(&old_target, &link).unwrap();
+        let expected = std::fs::read_link(&link).unwrap();
+
+        let error = replace_symlink_with(&f.project, &link, &expected, |_target, link| {
+            std::fs::create_dir(link)?;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "injected failure after junction directory creation",
+            ))
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("original link unchanged"));
+        assert_eq!(std::fs::read_link(&link).unwrap(), old_target);
+        assert_eq!(
+            std::fs::read_to_string(old_target.join("sentinel")).unwrap(),
+            "keep partial target"
+        );
+        assert!(!f.temp.path().read_dir().unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".patchbay-relink-")));
+    }
+
+    #[test]
+    fn replacement_preserves_public_node_changed_during_preparation() {
+        let f = setup();
+        let old_target = f.temp.path().join("old-race-target");
+        let new_target = f.temp.path().join("new-race-target");
+        std::fs::create_dir_all(&old_target).unwrap();
+        std::fs::create_dir_all(&new_target).unwrap();
+        let link = f.temp.path().join("race-surface");
+        symlink(&old_target, &link).unwrap();
+        let expected = std::fs::read_link(&link).unwrap();
+
+        let error = replace_symlink_with(&new_target, &link, &expected, |target, prepared| {
+            symlink(target, prepared)?;
+            remove_symlink(&link)?;
+            std::fs::create_dir(&link)?;
+            std::fs::write(link.join("sentinel"), "concurrent data")?;
+            Ok(())
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("changed while replacement"));
+        assert_eq!(
+            std::fs::read_to_string(link.join("sentinel")).unwrap(),
+            "concurrent data"
+        );
+        assert!(std::fs::symlink_metadata(&link).unwrap().is_dir());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_move_helpers_never_replace_an_occupied_destination() {
+        let f = setup();
+        let target = f.temp.path().join("move-target");
+        std::fs::create_dir_all(&target).unwrap();
+
+        let prepared = f.temp.path().join("prepared-link");
+        make_symlink(&target, &prepared).unwrap();
+        let occupied_install = f.temp.path().join("occupied-install");
+        std::fs::write(&occupied_install, "install owner data").unwrap();
+        assert!(install_prepared_no_replace(&prepared, &occupied_install, &target).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&occupied_install).unwrap(),
+            "install owner data"
+        );
+        assert!(std::fs::symlink_metadata(&prepared)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+
+        let backup = f.temp.path().join("backup-link");
+        make_symlink(&target, &backup).unwrap();
+        let occupied_restore = f.temp.path().join("occupied-restore");
+        std::fs::write(&occupied_restore, "restore owner data").unwrap();
+        assert!(restore_backup_no_replace(&backup, &occupied_restore, &target).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&occupied_restore).unwrap(),
+            "restore owner data"
+        );
+        assert!(std::fs::symlink_metadata(&backup)
+            .unwrap()
+            .file_type()
+            .is_symlink());
     }
 
     #[test]
@@ -1275,6 +1821,21 @@ mod tests {
             .contains("1 created"));
         // The unrelated physical skill is left untouched.
         assert!(f.project.join(".claude/skills/hand-made").is_dir());
+        assert_eq!(
+            std::fs::read_to_string(f.project.join(".claude/skills/demo-skill").join("SKILL.md"))
+                .unwrap(),
+            std::fs::read_to_string(f.original.join("SKILL.md")).unwrap()
+        );
+        assert!(link_target_matches(
+            &f.project.join(".claude/skills/demo-skill"),
+            &f.project.join(".agents/skills/demo-skill")
+        ));
+        #[cfg(windows)]
+        assert!(
+            std::fs::read_link(f.project.join(".claude/skills/demo-skill"))
+                .unwrap()
+                .is_absolute()
+        );
 
         // A different original that collides on the aggregate name is a conflict,
         // never an overwrite of the existing link.
@@ -1287,6 +1848,52 @@ mod tests {
             &f.project.join(".agents/skills/demo-skill"),
             &f.original
         ));
+    }
+
+    #[test]
+    fn wrong_surface_symlink_and_surface_file_are_preserved_as_conflicts() {
+        let f = setup();
+        let wrong = f.temp.path().join("wrong-surface");
+        std::fs::create_dir_all(&wrong).unwrap();
+        std::fs::write(wrong.join("sentinel"), "wrong target data").unwrap();
+        std::fs::create_dir_all(f.project.join(".claude")).unwrap();
+        let claude = f.project.join(".claude/skills");
+        symlink(&wrong, &claude).unwrap();
+        std::fs::create_dir_all(f.project.join(".codex")).unwrap();
+        let codex = f.project.join(".codex/skills");
+        std::fs::write(&codex, "physical file").unwrap();
+
+        let report = apply_fresh(
+            &f,
+            &[f.original.clone()],
+            &["claude".to_string(), "codex".to_string()],
+        );
+        assert!(report
+            .entries
+            .iter()
+            .all(|entry| entry.action == "conflict"));
+        assert_eq!(std::fs::read_link(&claude).unwrap(), wrong);
+        assert_eq!(
+            std::fs::read_to_string(wrong.join("sentinel")).unwrap(),
+            "wrong target data"
+        );
+        assert_eq!(std::fs::read_to_string(&codex).unwrap(), "physical file");
+    }
+
+    #[test]
+    fn physical_surface_collision_is_preserved_as_a_conflict() {
+        let f = setup();
+        let collision = f.project.join(".claude/skills/demo-skill");
+        std::fs::create_dir_all(&collision).unwrap();
+        std::fs::write(collision.join("sentinel"), "keep physical skill").unwrap();
+
+        let report = apply_fresh(&f, &[f.original.clone()], &["claude".to_string()]);
+        assert_eq!(report.entries[0].action, "conflict");
+        assert_eq!(
+            std::fs::read_to_string(collision.join("sentinel")).unwrap(),
+            "keep physical skill"
+        );
+        assert!(collision.is_dir());
     }
 
     #[test]
