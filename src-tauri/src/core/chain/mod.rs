@@ -73,6 +73,21 @@ pub struct GuardSurface {
 /// this guard: they are not a Patchbay-managed global whitelist surface.
 const GUARDED_GLOBAL_ADAPTERS: &[&str] = &["claude_code", "codex", "github_copilot", "opencode"];
 
+/// Vendor-managed entries that agents install INTO their own guarded surface.
+/// These are agent features, not user skills: deleting them breaks the feature
+/// and the agent recreates them anyway. Keyed by adapter so a same-named
+/// directory on another agent's surface is still a violation.
+///
+/// Known: Codex writes its Chronicle screen-recording skill to
+/// `~/.codex/skills/chronicle` when the user enables that feature.
+const VENDOR_MANAGED_GLOBAL_ENTRIES: &[(&str, &str)] = &[("codex", "chronicle")];
+
+fn is_vendor_managed_entry(adapter_key: &str, entry_name: &str) -> bool {
+    VENDOR_MANAGED_GLOBAL_ENTRIES
+        .iter()
+        .any(|(key, name)| *key == adapter_key && *name == entry_name)
+}
+
 /// Check that every policy-governed global agent surface is free of real user Skills.
 ///
 /// Surface paths come from the Agent adapter catalogue (never a second
@@ -83,12 +98,12 @@ pub fn global_guard(adapters: &[ToolAdapter]) -> Vec<GuardSurface> {
     adapters
         .iter()
         .filter(|adapter| GUARDED_GLOBAL_ADAPTERS.contains(&adapter.key.as_str()))
-        .map(|adapter| evaluate_surface(&adapter.display_name, &adapter.skills_dir()))
+        .map(|adapter| evaluate_surface(&adapter.key, &adapter.display_name, &adapter.skills_dir()))
         .collect()
 }
 
 /// Inspect one global surface directory for valid-Skill violations. Read-only.
-fn evaluate_surface(agent: &str, path: &Path) -> GuardSurface {
+fn evaluate_surface(adapter_key: &str, agent: &str, path: &Path) -> GuardSurface {
     let (state, violations) = match std::fs::read_dir(path) {
         // Absent surface: the agent has no global skills directory at all.
         Err(_) => ("absent".to_string(), Vec::new()),
@@ -102,6 +117,9 @@ fn evaluate_surface(agent: &str, path: &Path) -> GuardSurface {
                     // symlinks, so broken links and empty runtime directories
                     // are naturally excluded.
                     if !is_valid_skill_dir(&entry_path) {
+                        return None;
+                    }
+                    if is_vendor_managed_entry(adapter_key, &entry.file_name().to_string_lossy()) {
                         return None;
                     }
                     let trace = link_tracer::trace(&entry_path);
@@ -438,5 +456,47 @@ mod guard_tests {
         let adapter = adapter_pinned_to("qoderwork", &surface);
 
         assert!(global_guard(&[adapter]).is_empty());
+    }
+
+    #[test]
+    fn vendor_managed_entry_on_a_guarded_surface_is_not_a_violation() {
+        // Codex installs its Chronicle screen-recording skill into its own
+        // guarded surface. That entry is an agent feature, not a user skill.
+        let temp = tempdir().unwrap();
+        let surface = temp.path().join(".codex/skills");
+        make_skill(&surface.join("chronicle"), "chronicle");
+        make_skill(&surface.join("rogue-skill"), "rogue-skill");
+        let adapter = adapter_pinned_to("codex", &surface);
+
+        let guarded = only_surface(global_guard(&[adapter]));
+        assert_eq!(guarded.state, "violation");
+        assert_eq!(guarded.violations.len(), 1);
+        assert_eq!(guarded.violations[0].skill, "rogue-skill");
+    }
+
+    #[test]
+    fn vendor_exemption_is_scoped_to_its_own_agent() {
+        // A directory named like Codex's vendor entry on ANOTHER agent's
+        // surface is still a user-placed skill and stays a violation.
+        let temp = tempdir().unwrap();
+        let surface = temp.path().join(".claude/skills");
+        make_skill(&surface.join("chronicle"), "chronicle");
+        let adapter = adapter_pinned_to("claude_code", &surface);
+
+        let guarded = only_surface(global_guard(&[adapter]));
+        assert_eq!(guarded.state, "violation");
+        assert_eq!(guarded.violations[0].skill, "chronicle");
+    }
+
+    #[test]
+    fn codex_surface_with_only_the_vendor_entry_reads_empty() {
+        let temp = tempdir().unwrap();
+        let surface = temp.path().join(".codex/skills");
+        make_skill(&surface.join("chronicle"), "chronicle");
+        let adapter = adapter_pinned_to("codex", &surface);
+
+        let guarded = only_surface(global_guard(&[adapter]));
+        assert_eq!(guarded.state, "empty");
+        assert!(guarded.violations.is_empty());
     }
 }
