@@ -528,7 +528,9 @@
     "unlinkSharedNotice": "其中含共享聚合層項目——斷開後所有 Agent 都會失去該技能。",
     "guardUnknown": "全域面未驗證 — 等待掃描結果",
     "agentAddition": "新入口 {{agents}}",
-    "removalsSkipped": "建鏈未通過驗證，斷鏈未執行 — 先處理上面的衝突，再重新預覽。"
+    "removalsSkipped": "建鏈未通過驗證，斷鏈未執行 — 先處理上面的衝突，再重新預覽。",
+    "refreshFailed": "重新掃描失敗 — 庫存可能已過期，未開啟掛技能面板。",
+    "ambiguousRemoval": "「{{names}}」在本專案裡有兩個同名原件，斷鏈只能按名字定址，會把仍勾選的那個一起斷掉。請在下方連結列表逐條處理。"
   },
   "instructions": {
     "panelTitle": "Instructions 指令",

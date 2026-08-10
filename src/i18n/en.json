@@ -528,7 +528,9 @@
     "unlinkSharedNotice": "Includes a shared aggregate entry — every Agent loses the Skill.",
     "guardUnknown": "Global surfaces unverified — waiting for a scan",
     "agentAddition": "new entry {{agents}}",
-    "removalsSkipped": "The link half did not verify, so no removals were applied — resolve the conflicts above and preview again."
+    "removalsSkipped": "The link half did not verify, so no removals were applied — resolve the conflicts above and preview again.",
+    "refreshFailed": "Rescan failed — the inventory may be out of date, so the editor was not opened.",
+    "ambiguousRemoval": "\"{{names}}\" resolves to two Originals in this project. Unlink is addressed by name, so it would also drop the one you kept checked — remove it from the link list below instead."
   },
   "instructions": {
     "panelTitle": "Instructions",

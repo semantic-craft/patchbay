@@ -54,7 +54,9 @@ interface ChainState {
   candidates: Record<string, ChainRepairCandidate[]>;
   loading: boolean;
   error: string | null;
-  reload: () => Promise<void>;
+  /** Rescan. Resolves `true` only when a fresh topology landed — callers that
+   * act on the inventory must not proceed on a stale one. */
+  reload: () => Promise<boolean>;
   /** Refresh just the preset list — not worth a full rescan. */
   reloadPresets: () => Promise<void>;
 }
@@ -73,7 +75,7 @@ export function ChainProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
@@ -109,8 +111,10 @@ export function ChainProvider({ children }: { children: ReactNode }) {
           .then((located) => setCandidates(located.candidates))
           .catch(() => {});
       }
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     } finally {
       setLoading(false);
     }
