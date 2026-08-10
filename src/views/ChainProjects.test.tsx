@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { screen, fireEvent, waitFor, within, act } from "@testing-library/react";
+import { useLocation } from "react-router-dom";
 
 // Boundary under test: the Tauri invocation adapter. We mock `invoke` and let
 // the real chain bindings + the Project Links view run on top of it. The folder
@@ -25,6 +25,7 @@ vi.mock("sonner", () => ({
 
 import { invoke } from "@tauri-apps/api/core";
 import { ChainProjects } from "./ChainProjects";
+import { renderWithChain } from "../test/renderWithChain";
 import type {
   ChainApplyOutcome,
   ChainCandidatesReport,
@@ -61,12 +62,8 @@ function liveRunId(): string {
   return (call?.[1] as { runId: string }).runId;
 }
 
-function renderView(initialEntry = "/chain/projects") {
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <ChainProjects />
-    </MemoryRouter>,
-  );
+function renderView(initialEntry = "/") {
+  return renderWithChain(<ChainProjects />, initialEntry);
 }
 
 const ENTRY: ChainTracedEntry = {
@@ -492,10 +489,11 @@ describe("ChainProjects", () => {
 
     renderView();
 
-    // The ✓ card is the whole of the main area: link count and last scan.
-    const green = await screen.findByTestId("workbench-green");
-    expect(green.textContent).toContain("All 1 links healthy");
-    expect(green.textContent).toContain("nothing needs you");
+    // The status line carries the verdict and the surfaces on one row.
+    const green = await screen.findByTestId("workbench-status-line");
+    expect(green.getAttribute("data-state")).toBe("green");
+    expect(green.textContent).toContain("1 links");
+    expect(green.textContent).toContain(".agents/skills");
 
     // No link-table noise — the list is behind one collapsed row.
     expect(screen.queryByText("alpha")).toBeNull();
@@ -533,19 +531,19 @@ describe("ChainProjects", () => {
     renderView();
 
     expect(await screen.findByText("alpha")).toBeTruthy();
-    expect(screen.queryByTestId("workbench-green")).toBeNull();
+    expect(screen.queryByTestId("workbench-status-line")).toBeNull();
     expect(screen.queryByTestId("workbench-attention")).toBeNull();
     expect(screen.queryByTestId("collapsed-links")).toBeNull();
   });
 
   it("renders severity-ordered evidence cards and collapses the healthy rest", async () => {
-    // Two findings for the project: an advice-level direct link and a
+    // Two findings for the project: a warning-level direct link and a
     // violation-level broken link, deliberately delivered worst-LAST so the
     // client-side ordering (not the wire order) is what's asserted.
     const direct = finding("/proj", {
       rule: "chain.direct_link",
       deviation: "direct",
-      severity: "advice",
+      severity: "warning",
       fingerprint: "fp-direct",
       evidence: {
         entry_path: "/proj/.claude/skills/beta",
@@ -600,7 +598,9 @@ describe("ChainProjects", () => {
 
     // The healthy remainder is one collapsed row, not a full table.
     expect(screen.getByTestId("collapsed-links").textContent).toContain("0 others normal");
-    expect(screen.queryByTestId("workbench-green")).toBeNull();
+    expect(screen.getByTestId("workbench-status-line").getAttribute("data-state")).not.toBe(
+      "green",
+    );
   });
 
   it("narrates the live repair from scripted events and hands off to the record card", async () => {
@@ -739,7 +739,9 @@ describe("ChainProjects", () => {
     await waitFor(() => expect(screen.queryByTestId("live-panel")).toBeNull());
     expect(screen.getByTestId("card-manual")).toBeTruthy();
     // Nothing was applied and nothing rescanned into green.
-    expect(screen.queryByTestId("workbench-green")).toBeNull();
+    expect(screen.getByTestId("workbench-status-line").getAttribute("data-state")).not.toBe(
+      "green",
+    );
   });
 
   it("shows the failed state and retries the live run", async () => {
@@ -860,12 +862,12 @@ describe("ChainProjects", () => {
 
     renderView();
 
-    // Prototype S4: the record card takes the status slot; the collapsed
-    // "N normal" row doubles as the all-green indicator.
+    // Prototype S4: the record card reports what just changed; the status
+    // line above it still says what the project is now.
     const card = await screen.findByTestId("repair-record");
     expect(card.textContent).toContain("Repair record");
     expect(card.textContent).toContain("completed");
-    expect(screen.queryByTestId("workbench-green")).toBeNull();
+    expect(screen.getByTestId("workbench-status-line").getAttribute("data-state")).toBe("green");
     expect(screen.getByTestId("collapsed-links")).toBeTruthy();
 
     // The diff is the journaled edits: link path plus before → after targets.
@@ -941,10 +943,10 @@ describe("ChainProjects", () => {
       expect(mockInvoke).toHaveBeenCalledWith("chain_dismiss_repair_record", { id: 7 }),
     );
 
-    // No undo happened; the green ✓ card returns once the record is hidden.
+    // No undo happened; only the record card goes away.
     expect(mockInvoke).not.toHaveBeenCalledWith("chain_undo_repair", expect.anything());
-    expect(await screen.findByTestId("workbench-green")).toBeTruthy();
-    expect(screen.queryByTestId("repair-record")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("repair-record")).toBeNull());
+    expect(screen.getByTestId("workbench-status-line").getAttribute("data-state")).toBe("green");
   });
 
   it("shows the preset bar in the green state and saves the current skills", async () => {
@@ -1243,10 +1245,10 @@ describe("ChainProjects", () => {
 
     renderView();
 
-    // Dirty is a hint, not a health deviation: the ✓ card and collapsed
-    // list stay, with the amber card alongside.
+    // Dirty is a hint, not a health deviation: the green status line and the
+    // collapsed list stay, with the amber card alongside.
     expect(await screen.findByTestId("dirty-repo-card")).toBeTruthy();
-    expect(screen.getByTestId("workbench-green")).toBeTruthy();
+    expect(screen.getByTestId("workbench-status-line").getAttribute("data-state")).toBe("green");
     expect(screen.getByTestId("collapsed-links")).toBeTruthy();
   });
 
@@ -1428,22 +1430,20 @@ describe("ChainProjects", () => {
   });
 
   it("jumps to the full diagnosis from the evidence card", async () => {
-    // The doctor is a section of the main screen now, so "see full diagnosis"
-    // is a query-param switch rather than a route change.
     function LocationProbe() {
       const location = useLocation();
       return <div data-testid="location">{location.pathname + location.search}</div>;
     }
-    render(
-      <MemoryRouter initialEntries={["/"]}>
+    renderWithChain(
+      <>
         <ChainProjects />
         <LocationProbe />
-      </MemoryRouter>,
+      </>,
     );
 
     fireEvent.click(await screen.findByTestId("card-diagnose"));
     await waitFor(() =>
-      expect(screen.getByTestId("location").textContent).toBe("/?tab=doctor"),
+      expect(screen.getByTestId("location").textContent).toBe("/doctor"),
     );
   });
 
@@ -1465,7 +1465,47 @@ describe("ChainProjects", () => {
 
     renderView();
 
-    expect(await screen.findByTestId("workbench-green")).toBeTruthy();
+    const line = await screen.findByTestId("workbench-status-line");
+    expect(line.getAttribute("data-state")).toBe("green");
+  });
+
+  it("folds a notice-level finding into one row and stays green", async () => {
+    // `project_private` describes an intended state. Treating it as an
+    // exception used to replace the whole status area with an alert card.
+    const priv = finding("/proj", {
+      rule: "chain.project_private",
+      deviation: "project_private",
+      severity: "notice",
+      fingerprint: "fp-private",
+      affected: [
+        { kind: "skill", name: "house-rules", path: "/proj/.agents/skills/house-rules" },
+        { kind: "project", name: "proj", path: "/proj" },
+      ],
+    });
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "chain_get_topology":
+          return Promise.resolve(TOPO);
+        case "instructions_scan":
+          return Promise.resolve(INSTRUCTIONS_REPORT);
+        case "chain_doctor_report":
+          return Promise.resolve({ findings: [priv], ignored: [], total: 1, scanned_at: 0 });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    renderView();
+
+    const line = await screen.findByTestId("workbench-status-line");
+    expect(line.getAttribute("data-state")).toBe("green");
+    expect(screen.queryByTestId("workbench-attention")).toBeNull();
+
+    // Still reachable — one row that expands to name it.
+    const quiet = screen.getByTestId("quiet-findings");
+    expect(quiet.textContent).toContain("1 notices");
+    fireEvent.click(within(quiet).getByRole("button", { expanded: false }));
+    expect(within(quiet).getByTestId("quiet-finding").textContent).toContain("house-rules");
   });
 
   it("opens the project selected by the sidebar query parameter", async () => {
@@ -1593,7 +1633,7 @@ describe("ChainProjects", () => {
     // The wizard replaces the whole green-state block: no ✓ card, no preset
     // bar, no collapsed link row — onboarding is the state.
     const wizard = await screen.findByTestId("onboarding-wizard");
-    expect(screen.queryByTestId("workbench-green")).toBeNull();
+    expect(screen.queryByTestId("workbench-status-line")).toBeNull();
     expect(screen.queryByTestId("chain-preset-bar")).toBeNull();
     expect(screen.queryByTestId("collapsed-links")).toBeNull();
 

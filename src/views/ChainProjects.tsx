@@ -5,42 +5,31 @@ import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import {
   chainApplyUnlink,
-  chainDoctorReport,
-  chainLocateCandidates,
   chainPlanUnlink,
-  chainPresetsList,
   chainRegisterProject,
-  chainRepairJournal,
-  chainRepoMoves,
-  getChainTopology,
   instructionsPlanInit,
   instructionsPlanNormalize,
-  instructionsScan,
 } from "../lib/tauri";
 import type {
-  ChainDoctorReport,
   ChainFinding,
-  ChainJournalRecord,
-  ChainPreset,
   ChainPresetSkill,
   ChainProject,
-  ChainRepairCandidate,
-  ChainRepoMove,
-  ChainTopology,
   ChainUnlinkPlan,
   InstructionsInitPlan,
   InstructionsNormalizePlan,
-  InstructionsScanReport,
 } from "../lib/tauri";
-import { projectFindings, SEVERITY_RANK, workbenchState } from "../lib/workbenchState";
-import { publishDoctorReport } from "../lib/doctorStore";
+import { useChain } from "../context/ChainContext";
+import {
+  isActionable,
+  projectFindings,
+  SEVERITY_RANK,
+  workbenchState,
+} from "../lib/workbenchState";
 import { LinkSkillsDialog } from "../components/LinkSkillsDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { InstructionsWriteDialog } from "../components/InstructionsWriteDialog";
-import { WorkbenchHeader } from "../components/workbench/WorkbenchHeader";
-import { ProjectSwitcher } from "../components/workbench/ProjectSwitcher";
-import { SurfacesCard } from "../components/workbench/SurfacesCard";
-import { StatusCard } from "../components/workbench/StatusCard";
+import { ProjectHeader } from "../components/workbench/ProjectHeader";
+import { ProjectStatusLine } from "../components/workbench/ProjectStatusLine";
 import { EvidenceCard } from "../components/workbench/EvidenceCard";
 import { RepairRecordCard } from "../components/workbench/RepairRecordCard";
 import { RepoMoveCard } from "../components/workbench/RepoMoveCard";
@@ -48,6 +37,7 @@ import { DirtyRepoCard } from "../components/workbench/DirtyRepoCard";
 import { ChainPresetBar } from "../components/workbench/ChainPresetBar";
 import { OnboardingWizard } from "../components/workbench/OnboardingWizard";
 import { CollapsedLinks } from "../components/workbench/CollapsedLinks";
+import { QuietFindings } from "../components/workbench/QuietFindings";
 import { InstructionsPanel } from "../components/workbench/InstructionsPanel";
 import { LinkTable, type LinkRow } from "../components/workbench/LinkTable";
 
@@ -75,75 +65,38 @@ export function ChainProjects() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [topo, setTopo] = useState<ChainTopology | null>(null);
-  const [instr, setInstr] = useState<InstructionsScanReport | null>(null);
-  const [doctor, setDoctor] = useState<ChainDoctorReport | null>(null);
-  // Fingerprint → located candidates for the report's broken findings (#30).
-  const [candidates, setCandidates] = useState<Record<string, ChainRepairCandidate[]>>({});
-  // Repair journal, newest first — the 修复记录 cards' data source (#31).
-  const [journal, setJournal] = useState<ChainJournalRecord[]>([]);
-  // Detected repo-move storms (#33) and the groups the user itemized back
-  // into individual cards (keyed by old_root→new_root).
-  const [repoMoves, setRepoMoves] = useState<ChainRepoMove[]>([]);
-  // Chain assembly presets (#35) — the green-state Preset bar's contents.
-  const [presets, setPresets] = useState<ChainPreset[]>([]);
+  // The scan is shared with every other area and with the shell's status bar,
+  // so this view reads it rather than running one of its own.
+  const {
+    topo,
+    doctor,
+    instr,
+    presets,
+    journal,
+    repoMoves,
+    candidates,
+    loading,
+    error,
+    reload,
+    reloadPresets,
+  } = useChain();
+  // Repo-move groups the user itemized back into individual cards
+  // (keyed by old_root→new_root).
   const [itemized, setItemized] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(() => searchParams.get("project"));
-  const [linkTarget, setLinkTarget] = useState<{ name: string; path: string } | null>(null);
+  // Held by path, not by value: the picker's project name is re-resolved from
+  // the latest scan every render.
+  const [linkTarget, setLinkTarget] = useState<string | null>(null);
   const [unlinkPlan, setUnlinkPlan] = useState<ChainUnlinkPlan | null>(null);
   const [planningInstructions, setPlanningInstructions] = useState<"normalize" | "init" | null>(null);
   const [instructionsTarget, setInstructionsTarget] = useState<InstructionsWriteTarget | null>(null);
 
+  // A fresh scan re-derives the storms, so the user's itemize decisions from
+  // the previous one no longer apply.
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Three independent server-side scans. They run together so the home
-      // screen costs one scan's latency instead of three. Only the topology is
-      // load-bearing: the instructions and Doctor reports share its registered
-      // projects, and each failure is tolerated separately so neither can blank
-      // the link view.
-      const [topology, instructions, report, records, storms, presetList] = await Promise.all([
-        getChainTopology(),
-        instructionsScan().catch(() => null),
-        chainDoctorReport().catch(() => null),
-        chainRepairJournal().catch(() => null),
-        chainRepoMoves().catch(() => null),
-        chainPresetsList().catch(() => null),
-      ]);
-      setTopo(topology);
-      setInstr(instructions);
-      setDoctor(report);
-      setJournal(records ?? []);
-      setRepoMoves(storms?.groups ?? []);
-      setItemized(new Set());
-      setPresets(presetList ?? []);
-      // The sidebar's health dots consume the same report (#30).
-      publishDoctorReport(report);
-      // Broken findings get their candidate evidence located in a second,
-      // non-blocking pass — the cards render immediately and the candidate
-      // row fills in when the lookup lands. Failures just leave it empty.
-      const broken = (report?.findings ?? [])
-        .filter((finding) => finding.deviation === "broken")
-        .map((finding) => finding.fingerprint);
-      setCandidates({});
-      if (broken.length > 0) {
-        chainLocateCandidates(broken)
-          .then((located) => setCandidates(located.candidates))
-          .catch(() => {});
-      }
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    setItemized(new Set());
+    await reload();
+  }, [reload]);
 
   useEffect(() => {
     setSelectedPath(searchParams.get("project"));
@@ -162,7 +115,7 @@ export function ChainProjects() {
   const rows = useMemo(() => (project ? projectRows(project) : []), [project]);
 
   // Which of the exception-driven states the main area renders: "green" is the
-  // ✓ card (#29), "attention" is severity-ordered evidence cards (#30), and
+  // status line, "attention" is severity-ordered evidence cards (#30), and
   // "unknown" (Doctor unreachable) asserts no health at all — full list only.
   const state = workbenchState(doctor, project);
 
@@ -173,12 +126,20 @@ export function ChainProjects() {
 
   // The selected project's findings, worst first. Doctor's wire order is
   // explicitly not a contract, so the workbench sorts for itself (#30).
-  const findings = useMemo(
+  const allFindings = useMemo(
     () =>
       [...projectFindings(doctor, project)].sort(
         (a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity],
       ),
     [doctor, project],
+  );
+
+  // Only actionable findings get an evidence card. The rest describe intended
+  // states, so they fold into one row instead of alarming the whole screen.
+  const findings = useMemo(() => allFindings.filter(isActionable), [allFindings]);
+  const quietFindings = useMemo(
+    () => allFindings.filter((finding) => !isActionable(finding)),
+    [allFindings],
   );
 
   // Repo-move storms scoped to this project (#33): a group card claims the
@@ -221,15 +182,6 @@ export function ChainProjects() {
     const flagged = new Set(findings.map((finding) => finding.evidence.entry_path));
     return rows.filter((row) => !flagged.has(row.entry.entry_path)).length;
   }, [rows, findings]);
-
-  // Preset 栏改动后只刷新套装列表——不值得为此重扫全拓扑。
-  const refreshPresets = useCallback(async () => {
-    try {
-      setPresets(await chainPresetsList());
-    } catch {
-      // The stale list stays; the next full load refreshes it.
-    }
-  }, []);
 
   // 「把当前 N 个技能存为 Preset」的素材：当前项目链接的去重技能引用
   // （同一技能的聚合层与各 surface 行合并为一条，取解析到的原件路径）。
@@ -294,7 +246,7 @@ export function ChainProjects() {
       const registered = await chainRegisterProject(picked);
       await load();
       selectProject(registered.path);
-      setLinkTarget({ name: registered.name, path: registered.path });
+      setLinkTarget(registered.path);
     } catch (e) {
       toast.error(String(e));
     }
@@ -302,21 +254,15 @@ export function ChainProjects() {
 
   const startLink = async () => {
     if (!project) return;
-    setLoading(true);
     try {
       // The picker is an inventory decision surface, so it must not inherit a
-      // topology snapshot from before an Original was added, removed, or moved.
-      const topology = await getChainTopology();
-      setTopo(topology);
-      const refreshed = topology.projects.find((candidate) => candidate.path === project.path);
-      setLinkTarget({
-        name: refreshed?.name ?? project.name,
-        path: refreshed?.path ?? project.path,
-      });
+      // snapshot from before an Original was added, removed, or moved. The
+      // target is held by path and re-resolved at render, so it always shows
+      // whatever the refreshed scan says.
+      await load();
+      setLinkTarget(project.path);
     } catch (e) {
       toast.error(String(e));
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -396,12 +342,9 @@ export function ChainProjects() {
 
   return (
     <div className="app-page">
-      <WorkbenchHeader
-        loading={loading}
-        scannedAt={topo?.scanned_at}
-        hasProject={project !== null}
+      <ProjectHeader
+        project={project}
         onPickFolder={() => void pickFolder()}
-        onRescan={() => void load()}
         onLink={() => void startLink()}
       />
 
@@ -411,10 +354,6 @@ export function ChainProjects() {
         </div>
       )}
       {loading && !topo && <div className="p-4 text-[13px] text-muted">{t("chain.scanning")}</div>}
-
-      {topo && (
-        <ProjectSwitcher projects={topo.projects} activePath={project?.path} onSelect={selectProject} />
-      )}
 
       {topo && project && onboarding && (
         <OnboardingWizard
@@ -427,20 +366,15 @@ export function ChainProjects() {
 
       {topo && project && !onboarding && (
         <>
-          {/* 状态区（#26 异常驱动三态）。头部这一槽位是「状态」本身：全绿时是
-              ✓ 状态卡，故障态是按 severity 排序的证据卡（#30）。修完留痕时
-              （#31，原型 S4）修复记录卡顶替 ✓ 卡；折叠行兼任全绿指示。 */}
-          {/* Preset 栏（#35）：全绿态的沉淀入口；套装应用归 #36 向导。 */}
-          {state === "green" && (
-            <ChainPresetBar
-              presets={presets}
-              currentSkills={currentSkills}
-              onChanged={() => void refreshPresets()}
+          {/* 状态区（#26 异常驱动三态）。状态行永远在最上面交代「这个项目现在
+              是什么样」；异常时它下面接按 severity 排序的证据卡（#30）；修完
+              留痕时（#31，原型 S4）记录卡跟在其后。 */}
+          {state !== "unknown" && (
+            <ProjectStatusLine
+              project={project}
+              count={rows.length}
+              green={state === "green"}
             />
-          )}
-
-          {state === "green" && doctor && !record && (
-            <StatusCard count={rows.length} scannedAt={doctor.scanned_at} />
           )}
           {state === "attention" && (
             <div data-testid="workbench-attention" className="space-y-2.5">
@@ -450,7 +384,7 @@ export function ChainProjects() {
                   group={storm.group}
                   fingerprints={storm.fingerprints}
                   skills={storm.skills}
-                  onViewDiagnosis={() => navigate("/?tab=doctor")}
+                  onViewDiagnosis={() => navigate("/doctor")}
                   onItemize={() =>
                     setItemized((cur) => new Set([...cur, storm.key]))
                   }
@@ -462,7 +396,7 @@ export function ChainProjects() {
                   key={finding.fingerprint}
                   finding={finding}
                   candidates={candidates[finding.fingerprint] ?? []}
-                  onViewDiagnosis={() => navigate("/?tab=doctor")}
+                  onViewDiagnosis={() => navigate("/doctor")}
                   onManual={
                     finding.deviation === "broken" ? () => manualUnlink(finding) : null
                   }
@@ -484,17 +418,6 @@ export function ChainProjects() {
             <DirtyRepoCard key={repo.path} repo={repo} />
           ))}
 
-          <SurfacesCard project={project} />
-
-          {instrProject && (
-            <InstructionsPanel
-              instrProject={instrProject}
-              planning={planningInstructions}
-              onNormalize={() => void startNormalize()}
-              onInit={() => void startInit()}
-            />
-          )}
-
           {/* 没有需要处理的事就不摆列表；一行折叠交代条数，展开即完整列表。
               故障态同理——卡片之外的正常项折叠为「其余 N 条正常」（#30）；
               只有 unknown（Doctor 取不到）退回完整列表、不做健康断言。 */}
@@ -507,13 +430,39 @@ export function ChainProjects() {
           ) : (
             linkTable
           )}
+
+          <QuietFindings
+            findings={quietFindings}
+            onViewDiagnosis={() => navigate("/doctor")}
+          />
+
+          {/* 治理与沉淀：低频，所以排在动线之后。 */}
+          {instrProject && (
+            <InstructionsPanel
+              instrProject={instrProject}
+              planning={planningInstructions}
+              onNormalize={() => void startNormalize()}
+              onInit={() => void startInit()}
+            />
+          )}
+
+          {/* Preset 栏（#35）：全绿态的沉淀入口；套装应用归 #36 向导。 */}
+          {state === "green" && (
+            <ChainPresetBar
+              presets={presets}
+              currentSkills={currentSkills}
+              onChanged={() => void reloadPresets()}
+            />
+          )}
         </>
       )}
 
       <LinkSkillsDialog
         open={linkTarget !== null}
-        projectName={linkTarget?.name ?? ""}
-        projectPath={linkTarget?.path ?? ""}
+        projectName={
+          topo?.projects.find((candidate) => candidate.path === linkTarget)?.name ?? ""
+        }
+        projectPath={linkTarget ?? ""}
         repos={topo?.repos ?? []}
         presets={presets}
         onClose={() => setLinkTarget(null)}

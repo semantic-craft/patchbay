@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
 
 // Boundary under test: the Tauri invocation adapter. We mock `invoke` and let
 // the real chain bindings + the Original Repositories view run on top of it.
@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
 import { ChainWarehouse } from "./ChainWarehouse";
+import { renderWithChain } from "../test/renderWithChain";
 import type {
   ChainRepo,
   ChainTopology,
@@ -75,7 +76,7 @@ describe("ChainWarehouse", () => {
   });
 
   it("shows a dirty repository as skipped in the pull preview", async () => {
-    render(<ChainWarehouse />);
+    renderWithChain(<ChainWarehouse />);
 
     // Select the dirty repo, which reveals the pull action.
     const checkbox = await screen.findByLabelText("Select toolkit for pull");
@@ -112,7 +113,7 @@ describe("ChainWarehouse", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<ChainWarehouse />);
+    renderWithChain(<ChainWarehouse />);
     await screen.findByText("Patchbay Central");
     expect(screen.getByText("managed default")).toBeDefined();
     expect(screen.queryByRole("checkbox")).toBeNull();

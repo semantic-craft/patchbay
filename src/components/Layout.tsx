@@ -3,13 +3,16 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { StatusBanner } from "./StatusBanner";
 import { CommandPalette } from "./CommandPalette";
+import { ChainStatusBar } from "./ChainStatusBar";
 import { useApp } from "../context/AppContext";
+import { useChain } from "../context/ChainContext";
 import { useTranslation } from "react-i18next";
 import { useDragWindow } from "../hooks/useDragWindow";
 
 export function Layout() {
   const { t } = useTranslation();
   const { appError, refreshAppData } = useApp();
+  const { reload: rescanChain } = useChain();
   const onDrag = useDragWindow();
   const navigate = useNavigate();
 
@@ -26,12 +29,14 @@ export function Layout() {
         const target = e.target as HTMLElement;
         if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
         e.preventDefault();
+        // One refresh gesture, both data planes — the registry and the scan.
         refreshAppData();
+        void rescanChain();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [navigate, refreshAppData]);
+  }, [navigate, refreshAppData, rescanChain]);
 
   return (
     <div className="app-glass-shell relative flex h-full w-full overflow-hidden text-primary">
@@ -47,6 +52,7 @@ export function Layout() {
       <div className="relative flex min-w-[600px] flex-1 flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto px-5 pb-5 pt-[calc(var(--titlebar-h)+20px)] scrollbar-hide">
           <div className="mx-auto flex min-h-full max-w-[1200px] flex-col gap-4">
+            <ChainStatusBar />
             {appError ? (
               <StatusBanner
                 compact

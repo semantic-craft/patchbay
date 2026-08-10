@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, GitBranch, Download, GitFork } from "lucide-react";
+import { GitBranch, Download, GitFork } from "lucide-react";
 import { cn } from "../utils";
 import {
-  getChainTopology,
-  getChainDuplicates,
   chainPlanPull,
   chainApplyPull,
   chainPlanForkSync,
@@ -12,9 +10,7 @@ import {
 } from "../lib/tauri";
 import type {
   ChainDuplicateCheckout,
-  ChainDuplicatesReport,
   ChainRepo,
-  ChainTopology,
   ChainPullPlan,
   ChainPullPreview,
   ChainPullResult,
@@ -22,8 +18,8 @@ import type {
   ChainForkSyncPreview,
   ChainForkSyncResult,
 } from "../lib/tauri";
+import { useChain } from "../context/ChainContext";
 import { HEALTH_TONE, TONE_BADGE, TONE_DOT, shortenPath, type ChainTone } from "../lib/chainUi";
-import { ChainScanStatus } from "../components/ChainScanStatus";
 
 /** Verdict tone for a pull skip/error reason code. */
 function pullReasonTone(reason: string | null): ChainTone {
@@ -77,10 +73,9 @@ interface Badge {
  */
 export function ChainWarehouse() {
   const { t } = useTranslation();
-  const [topo, setTopo] = useState<ChainTopology | null>(null);
-  const [duplicates, setDuplicates] = useState<ChainDuplicatesReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Repository health comes from the shell's shared scan, so this area no
+  // longer re-walks the filesystem just because you opened it.
+  const { topo, duplicates, loading, error, reload: load } = useChain();
 
   // Fast-forward pull (Issue #14): select repositories, preview their FF/skip
   // actions, apply, and show per-repo results. Mutating but fast-forward only.
@@ -97,20 +92,6 @@ export function ChainWarehouse() {
   const [forkResults, setForkResults] = useState<ChainForkSyncResult[] | null>(null);
   const [forkBusy, setForkBusy] = useState(false);
   const [forkError, setForkError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [topology, dupes] = await Promise.all([getChainTopology(), getChainDuplicates()]);
-      setTopo(topology);
-      setDuplicates(dupes);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const toggleSelect = useCallback((path: string) => {
     setSelected((prev) => {
@@ -186,10 +167,6 @@ export function ChainWarehouse() {
       setForkBusy(false);
     }
   }, [forkPlan, load]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const roots = useMemo(() => topo?.warehouse_roots.map((r) => r.root) ?? [], [topo]);
   const multiRoot = (topo?.warehouse_roots.length ?? 0) > 1;
@@ -569,7 +546,6 @@ export function ChainWarehouse() {
         <div>
           <h1 className="app-page-title">{t("chain.warehouseTitle")}</h1>
           <p className="app-page-subtitle">{t("chain.warehouseSubtitle")}</p>
-          <ChainScanStatus scannedAt={topo?.scanned_at} loading={loading} />
         </div>
         <div className="flex items-center gap-2">
           {selected.size > 0 && (
@@ -592,10 +568,7 @@ export function ChainWarehouse() {
               {t("chain.forkSync.selected", { count: selected.size })}
             </button>
           )}
-          <button className="app-button-secondary" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            {t("chain.rescan")}
-          </button>
+          {/* Rescan lives in the shell's chain bar — one control, one clock. */}
         </div>
       </div>
 

@@ -44,12 +44,24 @@ export function findingsForPath(
   );
 }
 
+/**
+ * Severities that actually demand the user's attention.
+ *
+ * `advice` and `notice` describe states that are working as intended — a
+ * deliberately project-private Skill is the common one — so treating them as
+ * exceptions turned a healthy project's whole screen into an alert list and
+ * hid its summary. They are still shown, folded into the green state.
+ */
+export function isActionable(finding: ChainFinding): boolean {
+  return finding.severity === "violation" || finding.severity === "warning";
+}
+
 export function workbenchState(
   report: ChainDoctorReport | null,
   project: ChainProject | null,
 ): WorkbenchState {
   if (!report || !project) return "unknown";
-  return projectFindings(report, project).length === 0 ? "green" : "attention";
+  return projectFindings(report, project).some(isActionable) ? "attention" : "green";
 }
 
 /** High-to-low severity rank for client-side ordering. Doctor's own ordering
@@ -62,13 +74,15 @@ export const SEVERITY_RANK: Record<ChainSeverity, number> = {
 };
 
 /** One project's health for the sidebar dot: the workbench state plus the
- * worst severity among its findings (null when green or unknown). */
+ * worst severity among its findings (null when green or unknown). The dot
+ * follows the same actionable threshold the workbench does, so the sidebar
+ * never marks a project that its own screen calls green. */
 export function projectHealth(
   report: ChainDoctorReport | null,
   path: string,
 ): { state: WorkbenchState; worst: ChainSeverity | null } {
   if (!report) return { state: "unknown", worst: null };
-  const findings = findingsForPath(report, path);
+  const findings = findingsForPath(report, path).filter(isActionable);
   if (findings.length === 0) return { state: "green", worst: null };
   const worst = findings.reduce((acc, finding) =>
     SEVERITY_RANK[finding.severity] < SEVERITY_RANK[acc.severity] ? finding : acc,

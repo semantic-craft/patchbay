@@ -105,13 +105,16 @@ mockInvoke.mockImplementation(dispatch as never);
 
 const { AppRoutes } = await import("./App");
 const { AppProvider } = await import("./context/AppContext");
+const { ChainProvider } = await import("./context/ChainContext");
 
 function renderApp(initialEntry: string) {
   return render(
     <AppProvider>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <AppRoutes />
-      </MemoryRouter>
+      <ChainProvider>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <AppRoutes />
+        </MemoryRouter>
+      </ChainProvider>
     </AppProvider>,
   );
 }
@@ -121,35 +124,37 @@ beforeEach(() => {
 });
 
 describe("AppRoutes", () => {
-  it("boots to the workbench at / with only projects in the sidebar", async () => {
+  it("boots straight into the selected project's workbench", async () => {
     renderApp("/");
-    expect(await screen.findByRole("heading", { name: "Project Links" })).toBeTruthy();
+    // The header names the project, not the screen — the workbench IS "/".
+    expect(await screen.findByRole("heading", { name: "proj" })).toBeTruthy();
     // First registered project is selected by default.
     expect(await screen.findByText("alpha-skill")).toBeTruthy();
-    // The sidebar is the project list plus the two footer destinations.
-    expect(screen.getByText("Projects")).toBeTruthy();
+    // The sidebar carries the project list plus the footer destinations.
+    expect(screen.getByRole("link", { name: "Diagnostics" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Skill Sources" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Fleet" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Workbench" })).toBeNull();
   });
 
-  it("switches between the main screen's sections", async () => {
+  it("keeps the global-surface guard visible on every route", async () => {
+    renderApp("/fleet");
+    expect(await screen.findByTestId("chain-status-bar")).toBeTruthy();
+  });
+
+  it("routes to the low-frequency areas from the sidebar", async () => {
     renderApp("/");
-    await screen.findByRole("heading", { name: "Project Links" });
+    await screen.findByRole("heading", { name: "proj" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Chain" }));
-    expect(await screen.findByRole("heading", { name: "Link Topology" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Skill Sources" }));
+    fireEvent.click(screen.getByRole("link", { name: "Skill Sources" }));
     expect(await screen.findByRole("heading", { name: "Skill Sources" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workbench" }));
-    expect(await screen.findByRole("heading", { name: "Project Links" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("link", { name: "Diagnostics" }));
+    expect(await screen.findByRole("heading", { name: "Diagnostics" })).toBeTruthy();
   });
 
   it("honours a ?project= deep link on the main screen", async () => {
     renderApp("/?project=%2Fproj2");
-    expect(await screen.findByRole("heading", { name: "Project Links" })).toBeTruthy();
     // The query selects the second project, not the default first.
     expect(await screen.findByText("beta-skill")).toBeTruthy();
     expect(screen.queryByText("alpha-skill")).toBeNull();
