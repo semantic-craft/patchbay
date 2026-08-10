@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Patchbay is now only the three-tier chain tool. The central skill library and everything built on it — the marketplace with its leaderboards, the local/Git install paths, GitHub backup and multi-device sync, presets applied to global agent surfaces, and the per-agent workspaces — have been removed. Skills live in the user's own Git repositories; Patchbay wires them into a project and keeps global surfaces empty.
 
 ### User-facing
+- **Vendor-managed agent entries no longer trip the global guard.** Codex installs its Chronicle screen-recording skill into `~/.codex/skills`; the guard now recognizes vendor-managed entries on their own agent's surface (same-named directories on other agents' surfaces still violate).
 - **One main screen.** The sidebar is the project list plus Fleet and Settings. Chain, Doctor, and Sources are sections of the main screen instead of separate destinations; navigation drops from nine entries to the project list plus two.
 - **Removed: Library, Install, Backup, the agent and global workspaces, and the project detail page.** The tray menu is now Open Patchbay / Quit.
 - **Chain sources are Git checkouts only.** "Patchbay Central" is no longer a tier-1 source, and the central-library path setting is gone.
