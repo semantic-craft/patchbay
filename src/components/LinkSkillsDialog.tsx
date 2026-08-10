@@ -80,11 +80,14 @@ function linkedPaths(project: ChainProject | null): Set<string> {
 }
 
 /** The Agents this project already exposes Skills through — the honest default
- * for an edit, instead of a hardcoded pair that silently skips the rest. */
+ * for an edit, instead of a hardcoded pair that silently skips the rest. Only
+ * agents the picker can actually target are kept: a surface outside
+ * CHAIN_AGENTS must not ride invisibly into a link plan. */
 function currentAgents(project: ChainProject | null): Set<string> {
+  const known = new Set<string>(CHAIN_AGENTS);
   const agents = new Set<string>();
   for (const surface of project?.surfaces ?? []) {
-    if (surface.kind !== "absent") agents.add(surface.agent);
+    if (surface.kind !== "absent" && known.has(surface.agent)) agents.add(surface.agent);
   }
   return agents.size > 0 ? agents : new Set(["claude", "codex"]);
 }
@@ -114,11 +117,24 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
   const [agents, setAgents] = useState<Set<string>>(() => currentAgents(project));
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [applied, setApplied] = useState<{ verified: boolean; items: ItemLike[] } | null>(null);
+  const [applied, setApplied] = useState<{
+    verified: boolean;
+    items: ItemLike[];
+    /** True when the link half failed and the removals were left unapplied. */
+    removalsSkipped: boolean;
+  } | null>(null);
 
   const added = useMemo(
     () => [...selected].filter((path) => !linked.has(path)),
     [selected, linked],
+  );
+  // Agents are part of the whitelist too: enabling a surface the project does
+  // not have yet is a change even with the Skill set untouched. Disabling a
+  // baseline agent is not — linking only ever creates, so an unchecked pill
+  // just scopes which surfaces receive NEW Skills, exactly as before.
+  const newAgents = useMemo(
+    () => [...agents].filter((agent) => !currentAgents(project).has(agent)),
+    [agents, project],
   );
   // Removals are named by Skill, because that is what unlink takes; only
   // Originals still present in the inventory can be identified this way.
@@ -132,6 +148,8 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
       .map((path) => byPath.get(path))
       .filter((name): name is string => Boolean(name));
   }, [selected, linked, repos]);
+
+  const changeCount = added.length + removed.length + newAgents.length;
 
   if (!open || !project) return null;
 
@@ -150,10 +168,16 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
 
   // Step 1 → 2: a read-only preview of the whole change set, both directions.
   const buildPreview = async () => {
-    if (added.length === 0 && removed.length === 0) return;
+    if (changeCount === 0) return;
     setLoading(true);
     try {
-      const link = added.length > 0 ? await chainPlanLink(project.path, added, [...agents]) : null;
+      // A new agent surface needs the WHOLE selection, not just the additions —
+      // otherwise a pre-existing per-entry surface would receive only the new
+      // Skills. Without new agents, planning just the additions keeps the
+      // preview free of dozens of "exists" rows.
+      const linkPaths = newAgents.length > 0 ? [...selected] : added;
+      const link =
+        linkPaths.length > 0 ? await chainPlanLink(project.path, linkPaths, [...agents]) : null;
       const unlink: ChainUnlinkPlan[] = [];
       for (const name of removed) {
         unlink.push(await chainPlanUnlink(project.path, name, []));
@@ -166,8 +190,10 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
     }
   };
 
-  // Step 2 → 3: apply exactly what was previewed. Links first, so a Skill that
-  // is being repointed rather than dropped never loses access in between.
+  // Step 2 → 3: apply exactly what was previewed. Links go first, and the
+  // removals only run once the link half verified: a same-named swap whose
+  // link conflicts must NOT proceed to unlink the Original the project still
+  // depends on — that would leave it with neither.
   const apply = async () => {
     if (!preview) return;
     setLoading(true);
@@ -178,13 +204,22 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
         const outcome = await chainApplyLink(preview.link);
         verified = verified && outcome.verified;
         items.push(...outcome.report.skills, ...outcome.report.entries);
+        const conflicted = [...outcome.report.skills, ...outcome.report.entries].some(
+          (item) => item.action === "conflict" || item.action === "error",
+        );
+        if ((!outcome.verified || conflicted) && preview.unlink.length > 0) {
+          setApplied({ verified: false, items, removalsSkipped: true });
+          toast.warning(t("chain.removalsSkipped"));
+          onLinked();
+          return;
+        }
       }
       for (const plan of preview.unlink) {
         const outcome = await chainApplyUnlink(plan);
         verified = verified && outcome.verified;
         items.push(...outcome.report);
       }
-      setApplied({ verified, items });
+      setApplied({ verified, items, removalsSkipped: false });
       if (verified) toast.success(t("chain.applyVerified", { count: items.length }));
       else toast.warning(t("chain.applyUnverified"));
       onLinked();
@@ -194,8 +229,6 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
       setLoading(false);
     }
   };
-
-  const changeCount = added.length + removed.length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -235,6 +268,8 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
               ))}
               <span data-testid="link-diff" className="ml-auto text-[12px] text-muted">
                 {t("chain.changeSummary", { added: added.length, removed: removed.length })}
+                {newAgents.length > 0 &&
+                  ` · ${t("chain.agentAddition", { agents: newAgents.join(", ") })}`}
               </span>
             </div>
 
@@ -347,6 +382,14 @@ export function LinkSkillsDialog({ open, project, repos, presets, onClose, onLin
                   : t("chain.applyUnverified")}
               </span>
             </div>
+            {applied.removalsSkipped && (
+              <p
+                data-testid="removals-skipped"
+                className="mb-3 text-[12px] text-amber-400"
+              >
+                {t("chain.removalsSkipped")}
+              </p>
+            )}
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
               {applied.items.map((item, index) => (
                 <ItemRow key={`${item.path}:${index}`} item={item} />

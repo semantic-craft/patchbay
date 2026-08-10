@@ -1832,6 +1832,108 @@ describe("ChainProjects", () => {
     expect(await screen.findByTestId("preview-unlink")).toBeTruthy();
   });
 
+  it("plans an agent-only addition using the full whitelist", async () => {
+    // `proj` exposes claude only. Enabling codex is a change all by itself,
+    // and the plan must carry the WHOLE selection so the new surface gets
+    // every Skill — not just whatever happened to be newly checked.
+    const inventory = repo("source", [{ name: "alpha", path: "/wh/repo/skills/alpha" }]);
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "chain_get_topology":
+          return Promise.resolve({ ...TOPO, repos: [inventory] });
+        case "instructions_scan":
+          return Promise.resolve(INSTRUCTIONS_REPORT);
+        case "chain_doctor_report":
+          return Promise.resolve(doctorReport());
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
+    await screen.findByTestId("skill-picker");
+    // Untouched selection: nothing to preview yet.
+    expect((screen.getByTestId("link-preview") as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "codex" }));
+    expect(screen.getByTestId("link-diff").textContent).toContain("codex");
+
+    fireEvent.click(screen.getByTestId("link-preview"));
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("chain_plan_link", {
+        projectPath: "/proj",
+        skillPaths: ["/wh/repo/skills/alpha"],
+        agents: ["claude", "codex"],
+      }),
+    );
+  });
+
+  it("aborts the removals when the link half does not verify", async () => {
+    // A same-named swap: the link conflicts, so applying the unlink anyway
+    // would strip the Original the project still depends on.
+    const inventory = repo("source", [
+      { name: "alpha", path: "/wh/repo/skills/alpha" },
+      { name: "beta", path: "/wh/repo/skills/beta" },
+    ]);
+    const linkPlan: ChainLinkPlan = {
+      project: "/proj",
+      agg_dir: "/proj/.agents/skills",
+      originals: ["/wh/repo/skills/beta"],
+      agents: ["claude"],
+      skills: [],
+      entries: [],
+      evidence: {},
+    };
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "chain_get_topology":
+          return Promise.resolve({ ...TOPO, repos: [inventory] });
+        case "instructions_scan":
+          return Promise.resolve(INSTRUCTIONS_REPORT);
+        case "chain_doctor_report":
+          return Promise.resolve(doctorReport());
+        case "chain_plan_link":
+          return Promise.resolve(linkPlan);
+        case "chain_plan_unlink":
+          return Promise.resolve(UNLINK_PLAN);
+        case "chain_apply_link":
+          return Promise.resolve({
+            report: {
+              agg_dir: "/proj/.agents/skills",
+              skills: [
+                {
+                  name: "beta",
+                  path: "/proj/.agents/skills/beta",
+                  action: "conflict",
+                  message: "already points elsewhere",
+                },
+              ],
+              entries: [],
+            },
+            verified: false,
+            observed: [],
+            missing: ["beta"],
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
+    const picker = await screen.findByTestId("skill-picker");
+    fireEvent.click(within(picker).getByRole("checkbox", { name: "beta" }));
+    fireEvent.click(within(picker).getByRole("checkbox", { name: "alpha" }));
+
+    fireEvent.click(screen.getByTestId("link-preview"));
+    fireEvent.click(await screen.findByTestId("link-apply"));
+
+    // The failure is reported and the removal half never ran.
+    await screen.findByTestId("removals-skipped");
+    expect(mockInvoke).not.toHaveBeenCalledWith("chain_apply_unlink", expect.anything());
+  });
+
   it("refreshes the topology before opening the link dialog", async () => {
     const staleRepo = repo("source", [
       { name: "removed-skill", path: "/wh/source/skills/removed-skill" },
