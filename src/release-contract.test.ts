@@ -57,10 +57,6 @@ describe("Patchbay release contract", () => {
     const zhReadme = read("README.zh-CN.md");
     const manageSkills = read("skills/manage-skills/SKILL.md");
 
-    for (const locale of [en, zh, zhTW]) {
-      expect(locale.settings.repoWarning_config_unreadable).toContain("~/.patchbay");
-      expect(locale.settings.repoWarning_repo_path_invalid).toContain("~/.patchbay");
-    }
     for (const doc of [readme, zhReadme, manageSkills]) {
       expect(doc).toContain("~/.patchbay");
       expect(doc).toContain("patchbay-cli");

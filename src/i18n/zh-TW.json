@@ -308,7 +308,7 @@
     "referencedBy": "被 {{count}} 專案引用",
     "noRefs": "無引用",
     "warehouseTitle": "技能源",
-    "warehouseSubtitle": "Patchbay 中央庫是預設託管源；可選開發儲存庫保留 Git 健康檢查與更新操作",
+    "warehouseSubtitle": "存放技能原件的 Git 儲存庫 — 這裡只做 Git 健康檢查與更新，不複製技能",
     "warehouseEmpty": "未找到技能源。",
     "managedSource": "預設託管源",
     "origin": "origin",
@@ -357,7 +357,7 @@
       "external": "外部",
       "broken": "斷鏈"
     },
-    "linkButton": "＋ 掛技能",
+    "linkButton": "掛技能",
     "pickProject": "選擇專案目錄…",
     "linkDialogTitle": "掛技能到 {{project}}",
     "agentsLabel": "Agent 入口",
@@ -694,20 +694,6 @@
     "selectFolder": "選擇",
     "addAgent": "新增",
     "globalConfig": "全域設定",
-    "repoPath": "中央倉庫路徑",
-    "repoPathDesc": "所有 Skills 和 Preset 設定的預設儲存位置。",
-    "repoPathSaved": "中央倉庫路徑已更新",
-    "repoPathReset": "中央倉庫路徑已恢復預設",
-    "repoPathRestartNotice": "重新啟動應用後，新路徑才會正式生效並遷移既有資料。",
-    "repoPathEmpty": "請先填寫中央倉庫路徑",
-    "repoPathDefaultHint": "目前使用預設中央倉庫路徑",
-    "repoPathCustomHint": "目前使用自訂中央倉庫路徑",
-    "changeDir": "變更目錄",
-    "openInFinder": "開啟資料夾",
-    "syncMode": "預設同步模式",
-    "syncModeDesc": "建議使用符號連結，佔用空間極小且修改可即時生效。全域與專案工作區均生效；注意專案裡的符號連結指向本機中央庫，不會隨倉庫帶走。",
-    "symlink": "符號連結",
-    "copy": "檔案複製",
     "theme": "主題",
     "themeDesc": "選擇應用的外觀主題。",
     "themeLight": "淺色",
@@ -741,8 +727,6 @@
     "exportLogsDone": "已匯出日誌（{{count}} 個檔案），請把 zip 拖到 GitHub issue 附件區。",
     "exportLogsFailed": "匯出日誌失敗。",
     "panicBanner": "上次執行 Patchbay 時發生崩潰（{{time}}）。",
-    "repoWarning_config_unreadable": "中央庫設定檔已損壞或無法讀取，本次啟動已回退到預設路徑（~/.patchbay）。如果技能庫看起來是空的，你的資料仍在先前設定的路徑裡——請到「中央倉庫路徑」重新指定。",
-    "repoWarning_repo_path_invalid": "設定的中央倉庫路徑無效，本次啟動已回退到預設路徑（~/.patchbay）。如果技能庫看起來是空的，請到「中央倉庫路徑」重新指定資料所在位置。",
     "panicDismiss": "忽略",
     "autoUpdate": {
       "title": "Skill 自動更新",
@@ -815,6 +799,6 @@
     "tabWorkbench": "專案工作台",
     "tabChain": "鏈路",
     "tabDoctor": "診斷",
-    "tabWarehouse": "開發源"
+    "tabWarehouse": "技能源"
   }
 }

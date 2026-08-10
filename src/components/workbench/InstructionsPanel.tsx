@@ -99,8 +99,10 @@ export function InstructionsPanel({ instrProject, planning, onNormalize, onInit 
         <div className="space-y-1.5">
           {instrProject.resident.map((r) => {
             const state = entryFor(r.agent)?.state ?? "missing";
+            // The agent column has to fit the longest installed agent key
+            // ("antigravity", 11 mono chars); 64px clipped it into the badge.
             return (
-              <div key={r.agent} className="grid grid-cols-[64px_86px_1fr_auto] items-center gap-2.5">
+              <div key={r.agent} className="grid grid-cols-[86px_86px_1fr_auto] items-center gap-2.5">
                 <span className="font-mono text-[11.5px] text-tertiary">{r.agent}</span>
                 <span
                   className={cn(

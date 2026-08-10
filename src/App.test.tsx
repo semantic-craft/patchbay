@@ -140,7 +140,7 @@ describe("AppRoutes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Chain" }));
     expect(await screen.findByRole("heading", { name: "Link Topology" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+    fireEvent.click(screen.getByRole("button", { name: "Skill Sources" }));
     expect(await screen.findByRole("heading", { name: "Skill Sources" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Workbench" }));
