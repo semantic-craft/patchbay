@@ -252,12 +252,9 @@
       "presetRename": "Rename",
       "presetDelete": "Delete",
       "presetDeleteConfirm": "Delete preset “{{name}}”? (existing links are untouched)",
-      "wizardStepSource": "Pick sources",
       "wizardStepSkills": "Pick skills",
       "wizardStepEntry": "Create entry",
-      "wizardSourceSkills": "{{count}} skills",
       "wizardNoSources": "No sources available — configure warehouse roots in Settings first.",
-      "wizardSourceSummary": "{{count}} sources selected",
       "wizardSkillsSummary": "Will create {{count}} links · next: create the .claude/skills entry and pick agents",
       "wizardEntrySummary": "Will create {{count}} links + {{agents}} agent entries",
       "wizardEntryHint": "Creates each selected agent's entry as a directory link to the .agents/skills aggregate; existing surfaces get per-skill entries instead.",
@@ -521,7 +518,13 @@
       }
     },
     "noProjectSelected": "No project yet",
-    "noProjectHint": "Pick a project folder to start"
+    "noProjectHint": "Pick a project folder to start",
+    "sourceAll": "All sources",
+    "willLink": "will link",
+    "willUnlink": "will unlink",
+    "changeSummary": "+{{added}} · −{{removed}}",
+    "resultRemoved": "Links to remove",
+    "unlinkSharedNotice": "Includes a shared aggregate entry — every Agent loses the Skill."
   },
   "instructions": {
     "panelTitle": "Instructions",

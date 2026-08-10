@@ -1626,34 +1626,50 @@ describe("ChainProjects", () => {
     });
   }
 
-  it("auto-enters the three-step wizard for a zero-link project and walks back and forth", async () => {
+  it("auto-enters the wizard for a zero-link project and walks back and forth", async () => {
     mockOnboarding();
     renderView();
 
-    // The wizard replaces the whole green-state block: no ✓ card, no preset
-    // bar, no collapsed link row — onboarding is the state.
+    // The wizard replaces the whole green-state block: no status line, no
+    // preset bar, no collapsed link row — onboarding is the state.
     const wizard = await screen.findByTestId("onboarding-wizard");
     expect(screen.queryByTestId("workbench-status-line")).toBeNull();
     expect(screen.queryByTestId("chain-preset-bar")).toBeNull();
     expect(screen.queryByTestId("collapsed-links")).toBeNull();
 
-    // Step 1: every scanned source repo is offered, preselected.
-    expect(within(wizard).getAllByTestId("wizard-source")).toHaveLength(2);
-    expect(within(wizard).getByTestId("wizard-summary").textContent).toContain(
-      "2 sources selected",
-    );
+    // Step 1 IS the picker, with every scanned source in its own rail —
+    // choosing sources is no longer a separate screen.
+    const picker = within(wizard).getByTestId("skill-picker");
+    expect(within(picker).getAllByTestId("picker-source")).toHaveLength(2);
 
-    // Forward to the skill picker, back to the sources, forward again.
-    fireEvent.click(within(wizard).getByTestId("wizard-next"));
-    expect(within(wizard).getByTestId("skill-picker")).toBeTruthy();
-    fireEvent.click(within(wizard).getByTestId("wizard-back"));
-    expect(within(wizard).getAllByTestId("wizard-source")).toHaveLength(2);
-    fireEvent.click(within(wizard).getByTestId("wizard-next"));
-
-    // Deselecting every skill keeps the wizard on step 2: nothing to create.
+    // Nothing selected yet, so there is nothing to create and no way forward.
     expect(
       (within(wizard).getByTestId("wizard-next") as HTMLButtonElement).disabled,
     ).toBe(true);
+
+    // Pick one, step forward to the entries, and back again.
+    fireEvent.click(within(picker).getByRole("checkbox", { name: "grilling" }));
+    fireEvent.click(within(wizard).getByTestId("wizard-next"));
+    expect(within(wizard).getByTestId("wizard-apply")).toBeTruthy();
+    fireEvent.click(within(wizard).getByTestId("wizard-back"));
+    expect(within(wizard).getByTestId("skill-picker")).toBeTruthy();
+  });
+
+  it("scopes the picker by source without dropping the selection", async () => {
+    mockOnboarding();
+    renderView();
+
+    const wizard = await screen.findByTestId("onboarding-wizard");
+    const picker = within(wizard).getByTestId("skill-picker");
+
+    fireEvent.click(within(picker).getByRole("checkbox", { name: "zotero" }));
+    // Narrowing to the other source hides zotero but must not deselect it —
+    // the old wizard silently pruned choices when sources were narrowed.
+    fireEvent.click(within(picker).getAllByTestId("picker-source")[0]);
+    expect(within(picker).queryByRole("checkbox", { name: "zotero" })).toBeNull();
+    expect(within(wizard).getByTestId("wizard-summary").textContent).toContain(
+      "Will create 1 links",
+    );
   });
 
   it("seeds from a preset, adjusts the selection, and submits one batch plan/apply", async () => {
@@ -1661,7 +1677,6 @@ describe("ChainProjects", () => {
     renderView();
 
     const wizard = await screen.findByTestId("onboarding-wizard");
-    fireEvent.click(within(wizard).getByTestId("wizard-next"));
 
     // Preset 起步: one click selects the preset's references.
     fireEvent.click(within(wizard).getByTestId("picker-preset-pill"));
@@ -1679,7 +1694,7 @@ describe("ChainProjects", () => {
       "Will create 2 links",
     );
 
-    // Step 3: agents default to claude+codex; add copilot. The summary names
+    // Step 2: agents default to claude+codex; add copilot. The summary names
     // both halves of the batch: N links + M agent entries.
     fireEvent.click(within(wizard).getByTestId("wizard-next"));
     fireEvent.click(within(wizard).getByRole("button", { name: "copilot" }));
@@ -1750,19 +1765,69 @@ describe("ChainProjects", () => {
     renderView();
 
     // The existing project is green with links, so no wizard — the same
-    // picker arrives through「＋ 链接技能」instead.
+    // picker arrives through「挂技能」instead.
     fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
     const picker = await screen.findByTestId("skill-picker");
     fireEvent.click(within(picker).getByTestId("picker-preset-pill"));
     fireEvent.click(screen.getByRole("button", { name: "Preview plan" }));
 
+    // Agents default to the surfaces this project actually has — `proj` only
+    // exposes claude — instead of a hardcoded claude+codex that would have
+    // silently skipped or invented a surface.
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith("chain_plan_link", {
         projectPath: "/proj",
         skillPaths: ["/wh/mp/skills/grilling", "/wh/mp/skills/tdd"],
-        agents: ["claude", "codex"],
+        agents: ["claude"],
       }),
     );
+  });
+
+  it("opens on the whitelist the project already has and unlinks by unchecking", async () => {
+    // `alpha` is linked and lives in the inventory, so the editor opens with
+    // it checked; unchecking it is the removal path that used to require a
+    // different surface entirely.
+    const inventory = repo("source", [
+      { name: "alpha", path: "/wh/repo/skills/alpha" },
+      { name: "beta", path: "/wh/repo/skills/beta" },
+    ]);
+    mockInvoke.mockImplementation((cmd: string) => {
+      switch (cmd) {
+        case "chain_get_topology":
+          return Promise.resolve({ ...TOPO, repos: [inventory] });
+        case "instructions_scan":
+          return Promise.resolve(INSTRUCTIONS_REPORT);
+        case "chain_doctor_report":
+          return Promise.resolve(doctorReport());
+        case "chain_plan_unlink":
+          return Promise.resolve(UNLINK_PLAN);
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Link skills" }));
+    const picker = await screen.findByTestId("skill-picker");
+    expect((within(picker).getByRole("checkbox", { name: "alpha" }) as HTMLInputElement).checked)
+      .toBe(true);
+    expect((within(picker).getByRole("checkbox", { name: "beta" }) as HTMLInputElement).checked)
+      .toBe(false);
+    // No change yet, so there is nothing to preview.
+    expect((screen.getByTestId("link-preview") as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(within(picker).getByRole("checkbox", { name: "alpha" }));
+    expect(screen.getByTestId("link-diff").textContent).toContain("−1");
+
+    fireEvent.click(screen.getByTestId("link-preview"));
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("chain_plan_unlink", {
+        projectPath: "/proj",
+        skillName: "alpha",
+        agents: [],
+      }),
+    );
+    expect(await screen.findByTestId("preview-unlink")).toBeTruthy();
   });
 
   it("refreshes the topology before opening the link dialog", async () => {

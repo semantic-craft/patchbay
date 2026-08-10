@@ -458,11 +458,11 @@ export function ChainProjects() {
       )}
 
       <LinkSkillsDialog
+        // Keyed by project: the editor is seeded from that project's current
+        // whitelist at mount, so switching projects starts a clean edit.
+        key={linkTarget ?? "closed"}
         open={linkTarget !== null}
-        projectName={
-          topo?.projects.find((candidate) => candidate.path === linkTarget)?.name ?? ""
-        }
-        projectPath={linkTarget ?? ""}
+        project={topo?.projects.find((candidate) => candidate.path === linkTarget) ?? null}
         repos={topo?.repos ?? []}
         presets={presets}
         onClose={() => setLinkTarget(null)}

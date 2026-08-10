@@ -252,12 +252,9 @@
       "presetRename": "重新命名",
       "presetDelete": "刪除",
       "presetDeleteConfirm": "刪除套裝「{{name}}」？（不影響任何已建立的連結）",
-      "wizardStepSource": "選來源",
       "wizardStepSkills": "挑技能",
       "wizardStepEntry": "建入口",
-      "wizardSourceSkills": "{{count}} 個技能",
       "wizardNoSources": "沒有可用的開發源——先在設定裡配置倉庫根目錄。",
-      "wizardSourceSummary": "已選 {{count}} 個來源",
       "wizardSkillsSummary": "將建立 {{count}} 條軟連結 · 下一步建立 .claude/skills 入口並選擇 agent",
       "wizardEntrySummary": "將建立 {{count}} 條軟連結 + {{agents}} 個 agent 入口",
       "wizardEntryHint": "為每個勾選的 agent 建立指向 .agents/skills 聚合層的入口目錄連結；面已存在時按技能逐條補連。",
@@ -521,7 +518,13 @@
       }
     },
     "noProjectSelected": "還沒有專案",
-    "noProjectHint": "選擇一個專案目錄開始"
+    "noProjectHint": "選擇一個專案目錄開始",
+    "sourceAll": "全部來源",
+    "willLink": "將掛上",
+    "willUnlink": "將斷開",
+    "changeSummary": "＋{{added}} · −{{removed}}",
+    "resultRemoved": "將斷開的連結",
+    "unlinkSharedNotice": "其中含共享聚合層項目——斷開後所有 Agent 都會失去該技能。"
   },
   "instructions": {
     "panelTitle": "Instructions 指令",
