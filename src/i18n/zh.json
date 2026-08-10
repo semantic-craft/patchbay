@@ -526,7 +526,9 @@
     "changeSummary": "＋{{added}} · −{{removed}}",
     "resultRemoved": "将断开的链接",
     "unlinkSharedNotice": "其中含共享聚合层条目——断开后所有 Agent 都会失去该技能。",
-    "guardUnknown": "全局面未验证 — 等待扫描结果"
+    "guardUnknown": "全局面未验证 — 等待扫描结果",
+    "agentAddition": "新入口 {{agents}}",
+    "removalsSkipped": "建链未通过验证，断链未执行 — 先处理上面的冲突，再重新预览。"
   },
   "instructions": {
     "panelTitle": "Instructions 指令",

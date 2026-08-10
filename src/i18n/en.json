@@ -526,7 +526,9 @@
     "changeSummary": "+{{added}} · −{{removed}}",
     "resultRemoved": "Links to remove",
     "unlinkSharedNotice": "Includes a shared aggregate entry — every Agent loses the Skill.",
-    "guardUnknown": "Global surfaces unverified — waiting for a scan"
+    "guardUnknown": "Global surfaces unverified — waiting for a scan",
+    "agentAddition": "new entry {{agents}}",
+    "removalsSkipped": "The link half did not verify, so no removals were applied — resolve the conflicts above and preview again."
   },
   "instructions": {
     "panelTitle": "Instructions",

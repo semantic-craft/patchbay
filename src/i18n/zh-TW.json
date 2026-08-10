@@ -526,7 +526,9 @@
     "changeSummary": "＋{{added}} · −{{removed}}",
     "resultRemoved": "將斷開的連結",
     "unlinkSharedNotice": "其中含共享聚合層項目——斷開後所有 Agent 都會失去該技能。",
-    "guardUnknown": "全域面未驗證 — 等待掃描結果"
+    "guardUnknown": "全域面未驗證 — 等待掃描結果",
+    "agentAddition": "新入口 {{agents}}",
+    "removalsSkipped": "建鏈未通過驗證，斷鏈未執行 — 先處理上面的衝突，再重新預覽。"
   },
   "instructions": {
     "panelTitle": "Instructions 指令",
