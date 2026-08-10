@@ -22,7 +22,7 @@ export function CollapsedLinks({ count, labelKey = "chain.workbench.allNormal", 
         data-testid="collapsed-links"
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
-        className="app-glass-card flex w-full items-center gap-2.5 px-4 py-3 text-left text-[12.5px] text-tertiary outline-none"
+        className="app-panel flex w-full items-center gap-2.5 px-4 py-3 text-left text-[12.5px] text-tertiary outline-none"
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_DOT.ok}`} />
         {t(labelKey, { count })}

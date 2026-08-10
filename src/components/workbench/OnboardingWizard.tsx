@@ -66,12 +66,12 @@ export function OnboardingWizard({ projectPath, repos, presets, onDone }: Onboar
   const nextDisabled = step === 0 && selected.size === 0;
 
   return (
-    <div data-testid="onboarding-wizard" className="app-glass-card overflow-hidden">
+    <div data-testid="onboarding-wizard" className="app-panel overflow-hidden">
       {/* 步骤进度条 */}
-      <div className="flex items-center border-b border-glass-hairline px-4 py-3">
+      <div className="flex items-center border-b border-hairline px-4 py-3">
         {STEP_KEYS.map((key, index) => (
           <div key={key} className="flex items-center">
-            {index > 0 && <div className="mx-3 h-px w-8 bg-glass-hairline" />}
+            {index > 0 && <div className="mx-3 h-px w-8 bg-hairline" />}
             <span
               className={cn(
                 "flex items-center gap-2 text-[12px] font-medium",
@@ -83,7 +83,7 @@ export function OnboardingWizard({ projectPath, repos, presets, onDone }: Onboar
                   "flex h-[22px] w-[22px] items-center justify-center rounded-full border text-[11px] font-bold",
                   index <= step
                     ? "border-transparent bg-accent text-white"
-                    : "border-glass-hairline bg-glass-soft text-muted",
+                    : "border-hairline bg-surface-hover text-muted",
                 )}
               >
                 {index < step ? <Check className="h-3 w-3" /> : index + 1}
@@ -137,7 +137,7 @@ export function OnboardingWizard({ projectPath, repos, presets, onDone }: Onboar
       </div>
 
       {/* 页脚：汇总 + 前后导航 */}
-      <div className="flex items-center gap-3 border-t border-glass-hairline px-4 py-3">
+      <div className="flex items-center gap-3 border-t border-hairline px-4 py-3">
         <span data-testid="wizard-summary" className="text-[12px] text-muted">
           {step === 0 && t("chain.workbench.wizardSkillsSummary", { count: selected.size })}
           {step === 1 &&

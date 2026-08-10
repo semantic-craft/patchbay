@@ -4,4 +4,3 @@ pub mod instructions;
 pub mod projects;
 pub mod settings;
 pub mod tools;
-pub mod window_glass;

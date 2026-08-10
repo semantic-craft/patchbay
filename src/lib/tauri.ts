@@ -234,18 +234,6 @@ export const clearLastPanic = () =>
 export const logStartupEvent = (label: string, elapsedMs: number) =>
   invoke<void>("log_startup_event", { label, elapsedMs: Math.round(elapsedMs) });
 
-// ── Window glass (#37) ──
-
-/**
- * Which native material ended up behind the webview: macOS 26 real glass,
- * NSVisualEffectView vibrancy on older macOS, or none (apply failed or
- * non-macOS — the CSS wallpaper must then stay opaque).
- */
-export type WindowGlassTier = "liquid-glass" | "vibrancy" | "none";
-
-export const getWindowGlassStatus = () =>
-  invoke<WindowGlassTier>("window_glass_status");
-
 // ── Git Backup ──
 
 

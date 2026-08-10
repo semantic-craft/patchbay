@@ -110,7 +110,7 @@ export function SkillPicker({
                 "rounded-full border px-3 py-1 text-[12px] font-medium transition-colors outline-none",
                 presetActive(preset)
                   ? "border-accent-border bg-surface-active text-secondary"
-                  : "border-glass-hairline bg-glass-soft text-muted hover:text-secondary",
+                  : "border-hairline bg-surface-hover text-muted hover:text-secondary",
               )}
             >
               {preset.name}
@@ -126,7 +126,7 @@ export function SkillPicker({
               "rounded-full border px-3 py-1 text-[12px] font-medium transition-colors outline-none",
               selected.size === 0
                 ? "border-accent-border bg-surface-active text-secondary"
-                : "border-glass-hairline bg-glass-soft text-muted hover:text-secondary",
+                : "border-hairline bg-surface-hover text-muted hover:text-secondary",
             )}
           >
             {t("chain.workbench.wizardPresetScratch")}

@@ -8,6 +8,7 @@ import { CloseActionGuard } from "./components/CloseActionGuard";
 import { AppUpdateNotifier } from "./components/AppUpdateNotifier";
 import { Layout } from "./components/Layout";
 import { ChainProjects } from "./views/ChainProjects";
+import { ChainOverview } from "./views/ChainOverview";
 import { ChainDoctor } from "./views/ChainDoctor";
 import { ChainWarehouse } from "./views/ChainWarehouse";
 import { Settings } from "./views/Settings";
@@ -36,6 +37,7 @@ export function AppRoutes() {
       <Route element={<Layout />}>
         {/* The workbench IS the main screen — one job, no shell around it. */}
         <Route path="/" element={<ChainProjects />} />
+        <Route path="/chain" element={<ChainOverview />} />
         <Route path="/doctor" element={<ChainDoctor />} />
         <Route path="/sources" element={<ChainWarehouse />} />
         <Route path="/fleet" element={<Fleet />} />
