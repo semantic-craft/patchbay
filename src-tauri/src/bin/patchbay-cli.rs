@@ -3039,6 +3039,7 @@ mod chain_cli_tests {
     #[test]
     fn apply_success_predicate_requires_verified_and_clean_items() {
         assert!(apply_outcome_succeeded(&apply_outcome(true, "created")));
+        assert!(apply_outcome_succeeded(&apply_outcome(true, "repaired")));
         assert!(apply_outcome_succeeded(&apply_outcome(true, "exists")));
         for bad in ["conflict", "skipped", "error"] {
             assert!(

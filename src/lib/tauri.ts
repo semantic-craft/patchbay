@@ -964,7 +964,7 @@ export const setWarehouseRoots = (roots: string[]) =>
 export interface ChainOpResult {
   name: string;
   path: string;
-  action: "created" | "exists" | "removed" | "absent" | "skipped" | "conflict" | "error";
+  action: "created" | "repaired" | "exists" | "removed" | "absent" | "skipped" | "conflict" | "error";
   message: string | null;
 }
 
@@ -985,7 +985,7 @@ export type ChainEntryEvidence =
 export interface ChainPlanItem {
   name: string;
   path: string;
-  action: "created" | "exists" | "conflict" | "error";
+  action: "created" | "repaired" | "exists" | "conflict" | "error";
   scope: "aggregate" | "surface";
   message: string | null;
 }

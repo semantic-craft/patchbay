@@ -8,6 +8,7 @@ use crate::core::{
     central_repo,
     error::AppError,
     project_registry,
+    skill_metadata,
     skill_store::{ProjectRecord, SkillStore},
     tool_adapters,
 };
@@ -1304,13 +1305,16 @@ fn fork_sync_audit_detail(result: &fork_sync::ForkSyncResult) -> String {
 
 /// Actions that count as a successful write for the audit log's success flag.
 fn is_success_action(action: &str) -> bool {
-    matches!(action, "created" | "exists" | "removed" | "absent")
+    matches!(
+        action,
+        "created" | "repaired" | "exists" | "removed" | "absent"
+    )
 }
 
 /// Actions that mean a link is present in the chain after apply (freshly made or
 /// already there). The single source of truth for "applied" across verification.
 fn links_present(action: &str) -> bool {
-    matches!(action, "created" | "exists")
+    matches!(action, "created" | "repaired" | "exists")
 }
 
 /// Repair actions that write to disk (the ones the registration gate protects).
@@ -1547,7 +1551,7 @@ fn verify_chain(
         let Some(surface) = proj.surfaces.iter().find(|s| &s.agent == agent) else {
             return false;
         };
-        match surface.kind.as_str() {
+        let topology_reaches = match surface.kind.as_str() {
             "dir_link" => surface.dir_link_ok,
             "per_entry" => observed.iter().all(|name| {
                 surface
@@ -1556,7 +1560,24 @@ fn verify_chain(
                     .any(|entry| entry.name == *name && entry.status == "via_agents")
             }),
             _ => false,
+        };
+        if !topology_reaches {
+            return false;
         }
+
+        let Some((_, rel)) = super::project_links::AGENT_SURFACES
+            .iter()
+            .find(|(candidate, _)| candidate == agent)
+        else {
+            return false;
+        };
+        let surface_path = super::project_links::surface_path(Path::new(&plan.project), rel);
+        observed.iter().all(|name| {
+            let skill_dir = surface_path.join(name);
+            skill_metadata::SKILL_DIR_MARKERS
+                .iter()
+                .any(|marker| std::fs::File::open(skill_dir.join(marker)).is_ok())
+        })
     });
 
     let clean = report
@@ -1812,6 +1833,49 @@ mod tests {
             .iter()
             .any(|entry| entry.action == "chain_link"
                 && entry.skill_name.as_deref() == Some("claude")));
+    }
+
+    #[test]
+    fn link_verifies_skill_with_lowercase_marker() {
+        let temp = tempdir().unwrap();
+        let projects_root = temp.path().join("Projects");
+        let warehouse_root = projects_root.join("xw-skills");
+        let repo_path = warehouse_root.join("source-repo");
+        let original = repo_path.join("skills").join("lower-skill");
+        let project = projects_root.join("demo-project");
+
+        fs::create_dir_all(&original).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        git2::Repository::init(&repo_path).unwrap();
+        // `is_valid_skill_dir` accepts both marker spellings; verification must
+        // not demand the uppercase one.
+        fs::write(
+            original.join("skill.md"),
+            "---\nname: lower-skill\ndescription: Lowercase marker fixture\n---\n",
+        )
+        .unwrap();
+
+        let store = SkillStore::new(&temp.path().join("patchbay.db")).unwrap();
+        store
+            .set_setting(
+                "chain_warehouse_root",
+                warehouse_root.to_string_lossy().as_ref(),
+            )
+            .unwrap();
+        store
+            .set_setting(
+                "chain_projects_root",
+                projects_root.to_string_lossy().as_ref(),
+            )
+            .unwrap();
+        let service = ChainService::new(&store);
+
+        let link = service
+            .link(&project, &[original.clone()], &["claude".to_string()])
+            .unwrap();
+        assert!(link.verified);
+        assert_eq!(link.observed, ["lower-skill"]);
+        assert!(link.missing.is_empty());
     }
 
     #[test]
@@ -2355,8 +2419,16 @@ mod tests {
         let repair = outcome.outcome.unwrap();
         assert!(repair.verified);
         assert!(repair.journal_id.is_some());
+        let native_target = std::fs::read_link(&f.entry).unwrap();
+        assert!(ops::link_target_matches(
+            &f.entry,
+            Path::new("../../.agents/skills/demo-skill")
+        ));
+        #[cfg(windows)]
+        assert!(native_target.is_absolute());
+        #[cfg(unix)]
         assert_eq!(
-            std::fs::read_link(&f.entry).unwrap(),
+            native_target,
             PathBuf::from("../../.agents/skills/demo-skill")
         );
     }
@@ -2876,11 +2948,15 @@ mod tests {
         let service = ChainService::new(&store);
         service.enrol_project(&project).unwrap();
 
+        let agents = ["claude", "codex", "copilot", "opencode"]
+            .map(str::to_string)
+            .to_vec();
+
         let plan = service
-            .plan_link(&project, &[original.clone()], &["claude".to_string()])
+            .plan_link(&project, &[original.clone()], &agents)
             .unwrap();
         assert_eq!(plan.skills[0].action, "created");
-        assert_eq!(plan.entries[0].action, "created");
+        assert!(plan.entries.iter().all(|entry| entry.action == "created"));
         // Preview is read-only.
         assert!(!project.join(".agents").exists());
         assert!(!project.join(".claude").exists());
@@ -2889,14 +2965,122 @@ mod tests {
         assert!(outcome.verified);
         assert_eq!(outcome.observed, ["demo-skill"]);
         assert!(outcome.missing.is_empty());
-        // The chain is really on disk: .claude/skills/demo-skill -> original.
-        let via = project.join(".claude/skills/demo-skill");
-        let tr = crate::core::chain::link_tracer::trace(&via);
-        assert!(tr.exists);
-        assert_eq!(
-            crate::core::chain::link_tracer::normalize(std::path::Path::new(&tr.final_target)),
-            crate::core::chain::link_tracer::normalize(&original)
+        // Every requested Agent can open the Skill through its real surface.
+        let expected = fs::read_to_string(original.join("SKILL.md")).unwrap();
+        for rel in [
+            ".claude/skills/demo-skill",
+            ".codex/skills/demo-skill",
+            ".copilot/skills/demo-skill",
+            ".opencode/skills/demo-skill",
+        ] {
+            let via = project.join(rel);
+            let tr = crate::core::chain::link_tracer::trace(&via);
+            assert!(tr.exists);
+            assert_eq!(
+                crate::core::chain::link_tracer::normalize(std::path::Path::new(&tr.final_target)),
+                crate::core::chain::link_tracer::normalize(&original)
+            );
+            assert_eq!(fs::read_to_string(via.join("SKILL.md")).unwrap(), expected);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn apply_is_unverified_when_topology_traces_but_skill_cannot_be_opened_via_surface() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (temp, warehouse_root, original, project) = guarded_fixture();
+        let store = guarded_store(&temp, &warehouse_root);
+        let service = ChainService::new(&store);
+        service.enrol_project(&project).unwrap();
+        service
+            .link(&project, &[original.clone()], &["claude".to_string()])
+            .unwrap();
+
+        let skill_md = original.join("SKILL.md");
+        let original_mode = fs::metadata(&skill_md).unwrap().permissions().mode();
+        fs::set_permissions(&skill_md, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let plan = service
+            .plan_link(&project, &[original.clone()], &["claude".to_string()])
+            .unwrap();
+        let outcome = service.apply_link(&plan).unwrap();
+        assert_eq!(outcome.report.skills[0].action, "exists");
+        assert_eq!(outcome.report.entries[0].action, "exists");
+        assert!(
+            crate::core::chain::link_tracer::trace(&project.join(".claude/skills/demo-skill"))
+                .exists
         );
+        assert!(!outcome.verified);
+
+        fs::set_permissions(&skill_md, fs::Permissions::from_mode(original_mode)).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn unreadable_relative_surface_is_reported_repaired_and_verified_end_to_end() {
+        let (temp, warehouse_root, original, project) = guarded_fixture();
+        let aggregate = project.join(".agents/skills");
+        fs::create_dir_all(&aggregate).unwrap();
+        ops::make_symlink(&original, &aggregate.join("demo-skill")).unwrap();
+        let surface = project.join(".claude/skills");
+        fs::create_dir_all(surface.parent().unwrap()).unwrap();
+        std::os::windows::fs::symlink_dir(Path::new("../.agents/skills"), &surface).unwrap();
+        assert!(fs::read_dir(&surface).is_err());
+
+        let store = guarded_store(&temp, &warehouse_root);
+        let service = ChainService::new(&store);
+        service.enrol_project(&project).unwrap();
+
+        let before = service.scan().unwrap();
+        let claude = before.projects[0]
+            .surfaces
+            .iter()
+            .find(|candidate| candidate.agent == "claude")
+            .unwrap();
+        assert!(!claude.dir_link_ok);
+        assert!(service
+            .doctor(&super::DoctorFilter::default())
+            .unwrap()
+            .findings
+            .iter()
+            .any(|finding| {
+                finding.rule == "chain.broken_link"
+                    && finding
+                        .affected
+                        .iter()
+                        .any(|affected| affected.kind == "surface" && affected.name == "claude")
+            }));
+
+        let plan = service
+            .plan_link(&project, &[original.clone()], &["claude".to_string()])
+            .unwrap();
+        assert_eq!(plan.entries[0].action, "repaired");
+        let outcome = service.apply_link(&plan).unwrap();
+        assert_eq!(outcome.report.entries[0].action, "repaired");
+        assert!(outcome.verified);
+        assert!(fs::read_link(&surface).unwrap().is_absolute());
+        assert_eq!(
+            fs::read_to_string(surface.join("demo-skill/SKILL.md")).unwrap(),
+            fs::read_to_string(original.join("SKILL.md")).unwrap()
+        );
+
+        let second = service
+            .plan_link(&project, &[original], &["claude".to_string()])
+            .unwrap();
+        assert_eq!(second.entries[0].action, "exists");
+        assert!(service
+            .doctor(&super::DoctorFilter::default())
+            .unwrap()
+            .findings
+            .iter()
+            .all(|finding| {
+                finding.rule != "chain.broken_link"
+                    || !finding
+                        .affected
+                        .iter()
+                        .any(|affected| affected.kind == "surface" && affected.name == "claude")
+            }));
     }
 
     /// AC5 shared-fixture equivalence proof. Drives the EXACT sequence the CLI's

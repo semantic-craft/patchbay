@@ -59,6 +59,7 @@ clap = { version = "4.5", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 junction = "2"
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Window-level glass (#37): bundles its own cocoa/objc calls, so it avoids the
