@@ -6,8 +6,7 @@ use serde::Serialize;
 use crate::core::{
     audit_log::AuditDraft,
     error::AppError,
-    project_registry,
-    skill_metadata,
+    project_registry, skill_metadata,
     skill_store::{ProjectRecord, SkillStore},
     tool_adapters,
 };
