@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-11
+
 ### Release Overview
 - Patchbay is now only the three-tier chain tool. The central skill library and everything built on it — the marketplace with its leaderboards, the local/Git install paths, GitHub backup and multi-device sync, presets applied to global agent surfaces, and the per-agent workspaces — have been removed. Skills live in the user's own Git repositories; Patchbay wires them into a project and keeps global surfaces empty.
 - The desktop UI now uses a flat canvas with one clean island: the former wallpaper, translucency, blur, and Liquid Glass layers are gone in both light and dark mode.

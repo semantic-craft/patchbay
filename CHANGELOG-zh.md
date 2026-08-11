@@ -7,18 +7,20 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-11
+
 ### 发布概览
 - Patchbay 收敛为纯粹的三层链路工具。中央技能库及其上层功能——含排行榜的技能市场、本地/Git 安装、GitHub 备份与多设备同步、把 Preset 应用到全局 Agent 面、以及各 Agent 工作区——全部移除。技能只住在用户自己的 Git 仓库里，Patchbay 负责把它们接进项目并保持全局面为空。
 - 桌面界面改为平坦画布上的单一净岛：壁纸、透明、模糊与 Liquid Glass 层在浅色和深色模式中均已移除。
 
-### 用户可见
+### 用户可见更新
 - **厂商自装的 Agent 条目不再触发全局守卫。** Codex 会把自家 Chronicle 录屏技能装进 `~/.codex/skills`；守卫现在识别厂商管理条目（仅限其所属 Agent 的面——别的 Agent 面上同名目录仍算违规）。
 - **单一主屏。** 侧边栏只剩项目列表加多机与设置；工作台、链路、诊断、开发源以沉入岛头的下划线页签呈现，导航入口从九个降到项目列表加两项侧栏工具。
 - **稳定视觉标识。** 项目名与技能名会取得稳定标识色，主操作采用软填充，对话框统一使用岛式处理。
 - **移除：技能库、安装、备份、Agent 与全局工作区、项目详情页。** 托盘菜单精简为「打开 Patchbay / 退出」。
 - **链路的技能源只认 Git 检出。**「Patchbay Central」不再是一层技能源，中央库路径设置一并移除。
 
-### 开发与治理
+### 开发者与治理更新
 - 删除市场、安装器、同步引擎、备份、自动备份、scenario、Agent 工作区与 Preset 模块及其命令；Tauri 命令面从 163 个降到 80 个。
 - `patchbay-cli` 保留 `chain`、`instructions`、`fleet`、`tools`，新增 `status`（数据目录与数据库路径），移除 `repo`、`skills`、`presets`、`git` 及 `--skills-root`。
 - `core::central_repo` 改名为 `core::app_dirs`，只负责应用自身状态（`~/.patchbay`）；`git_credentials` 保留钥匙串远端凭证，去掉 GitHub App 流程。
