@@ -5,17 +5,9 @@ All notable changes to Patchbay since its first independent release are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-08-11
-
-### Release Overview
-- 
-
-### User-facing
-- 
-
-### Developer & Governance
-- 
 ## [Unreleased]
+
+## [2.0.0] - 2026-08-11
 
 ### Release Overview
 - Patchbay is now only the three-tier chain tool. The central skill library and everything built on it — the marketplace with its leaderboards, the local/Git install paths, GitHub backup and multi-device sync, presets applied to global agent surfaces, and the per-agent workspaces — have been removed. Skills live in the user's own Git repositories; Patchbay wires them into a project and keeps global surfaces empty.
