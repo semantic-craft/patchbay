@@ -130,9 +130,12 @@ describe("AppRoutes", () => {
     expect(await screen.findByRole("heading", { name: "proj" })).toBeTruthy();
     // First registered project is selected by default.
     expect(await screen.findByText("alpha-skill")).toBeTruthy();
-    // The sidebar carries the project list plus the footer destinations.
-    expect(screen.getByRole("link", { name: "Diagnostics" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Skill Sources" })).toBeTruthy();
+    // The island header carries the workbench's four sections; the sidebar
+    // footer keeps only destinations outside that workbench.
+    expect(screen.getByRole("link", { name: "Workbench" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Chain" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Doctor" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sources" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Fleet" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
   });
@@ -142,15 +145,18 @@ describe("AppRoutes", () => {
     expect(await screen.findByTestId("chain-status-bar")).toBeTruthy();
   });
 
-  it("routes to the low-frequency areas from the sidebar", async () => {
+  it("routes to the low-frequency areas from the island tabs", async () => {
     renderApp("/");
     await screen.findByRole("heading", { name: "proj" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Skill Sources" }));
+    fireEvent.click(screen.getByRole("link", { name: "Sources" }));
     expect(await screen.findByRole("heading", { name: "Skill Sources" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("link", { name: "Diagnostics" }));
+    fireEvent.click(screen.getByRole("link", { name: "Doctor" }));
     expect(await screen.findByRole("heading", { name: "Diagnostics" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("link", { name: "Chain" }));
+    expect(await screen.findByRole("heading", { name: "Link Topology" })).toBeTruthy();
   });
 
   it("honours a ?project= deep link on the main screen", async () => {

@@ -171,6 +171,7 @@
     }
   },
   "chain": {
+    "overviewTitle": "Link Topology",
     "rootsTitle": "Original Repository roots",
     "rootsHint": "Folders scanned for Original Repositories. Scanned in order; duplicate roots are scanned once.",
     "rootAdd": "Add root…",
@@ -182,6 +183,7 @@
     "rootsEmpty": "No roots configured — using the default.",
     "rootSource": "root: {{name}}",
     "reposCount": "{{count}} repos",
+    "overviewSubtitle": "Original Repositories → project .agents/skills → agent entry links; global surfaces stay empty",
     "projectsTitle": "Project Links",
     "projectsSubtitle": "Per-project skill chains and agent entry status — link and unlink skills for each project",
     "workbench": {
@@ -338,6 +340,10 @@
     "dirLinkOk": "dir link ✓",
     "dirLinkBad": "dir link broken",
     "noAgg": "no .agents/skills",
+    "tierRepos": "1 · Skill sources",
+    "tierAgg": "2 · Project .agents/skills",
+    "tierSurfaces": "3 · Agent entries",
+    "detailHint": "Click a node to inspect its hop-by-hop chain",
     "location": "Location",
     "skill": "Skill",
     "chainCol": "Resolution",
@@ -539,6 +545,9 @@
     "noAgents": "No agents installed",
     "projectSegment": "project",
     "globalSegment": "global",
+    "costBarTitle": "Instructions cost",
+    "costBarHint": "Global resident tokens per agent — click for the per-project breakdown",
+    "costBarEmpty": "No global instructions",
     "doctor": {
       "subtitle": "Findings for skill chains and instructions surfaces — share severity filters and filter types by module",
       "clean": "No chain or instructions findings. Every managed surface follows the convention.",
@@ -823,5 +832,11 @@
     "addSelected": "Add Selected ({{count}})",
     "selectAll": "Select All",
     "deselectAll": "Deselect All"
+  },
+  "home": {
+    "tabWorkbench": "Workbench",
+    "tabChain": "Chain",
+    "tabDoctor": "Doctor",
+    "tabWarehouse": "Sources"
   }
 }

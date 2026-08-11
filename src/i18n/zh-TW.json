@@ -171,6 +171,7 @@
     }
   },
   "chain": {
+    "overviewTitle": "鏈路總覽",
     "rootsTitle": "原始儲存庫根目錄",
     "rootsHint": "掃描原始儲存庫（Skill 儲存庫的 git 檢出）的目錄。依序掃描；重複的根只掃描一次。",
     "rootAdd": "新增根目錄…",
@@ -182,6 +183,7 @@
     "rootsEmpty": "未設定根目錄——使用預設值。",
     "rootSource": "根目錄：{{name}}",
     "reposCount": "{{count}} 個儲存庫",
+    "overviewSubtitle": "原件儲存庫 → 專案 .agents/skills → Agent 入口鏈；全域面保持為空",
     "projectsTitle": "專案鏈路",
     "projectsSubtitle": "每個專案的技能鏈清單與 Agent 入口狀態 — 可為各專案掛接與斷開技能",
     "workbench": {
@@ -338,6 +340,10 @@
     "dirLinkOk": "目錄鏈 ✓",
     "dirLinkBad": "目錄鏈異常",
     "noAgg": "無 .agents/skills",
+    "tierRepos": "① 技能源",
+    "tierAgg": "② 專案 .agents/skills",
+    "tierSurfaces": "③ Agent 入口",
+    "detailHint": "點擊任一節點查看逐跳解析",
     "location": "位置",
     "skill": "技能",
     "chainCol": "解析鏈",
@@ -539,6 +545,9 @@
     "noAgents": "未安裝 agent",
     "projectSegment": "專案",
     "globalSegment": "全域",
+    "costBarTitle": "Instructions 成本",
+    "costBarHint": "各 Agent 全域面常駐 token——點擊查看逐專案明細",
+    "costBarEmpty": "無全域 Instructions",
     "doctor": {
       "subtitle": "並列診斷技能鏈與 instructions 規則 — 共用嚴重度篩選，並依模組篩選類型",
       "clean": "未發現技能鏈或 instructions 偏差。所有納管面皆符合規範。",
@@ -802,5 +811,11 @@
     "addSelected": "新增選取（{{count}}）",
     "selectAll": "全選",
     "deselectAll": "取消全選"
+  },
+  "home": {
+    "tabWorkbench": "專案工作台",
+    "tabChain": "鏈路",
+    "tabDoctor": "診斷",
+    "tabWarehouse": "開發源"
   }
 }
