@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "../../utils";
 import { STATUS_TONE, TONE_BADGE, shortenPath } from "../../lib/chainUi";
+import { entityColor } from "../../lib/entityColor";
 import type { ChainTopology, ChainTracedEntry } from "../../lib/tauri";
 
 export interface LinkRow {
@@ -44,10 +45,20 @@ export function LinkTable({ rows, topo, onUnlink }: LinkTableProps) {
         </thead>
         <tbody>
           {rows.map(({ location, entry }) => (
-            <tr key={entry.entry_path} className="border-b border-border-subtle last:border-b-0">
+            <tr
+              key={entry.entry_path}
+              className="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-surface-hover"
+            >
               <td className="px-4 py-2 font-mono text-[11.5px] text-muted">{location}</td>
               <td className="px-4 py-2 font-mono text-[12px] font-medium text-secondary">
-                {entry.name}
+                <span className="flex items-center gap-2">
+                  {/* 技能的标识色，与侧栏项目色同一套（K4 彩标）。 */}
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: entityColor(entry.name).color }}
+                  />
+                  {entry.name}
+                </span>
               </td>
               <td className="max-w-[380px] break-all px-4 py-2 font-mono text-[11px] text-muted">
                 {entry.hops.length > 0

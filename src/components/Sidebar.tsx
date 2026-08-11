@@ -1,13 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  GitBranch,
   Link2,
   MonitorSmartphone,
   Plus,
   Search,
   Settings,
-  Stethoscope,
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +13,7 @@ import { toast } from "sonner";
 import { cn } from "../utils";
 import { useApp } from "../context/AppContext";
 import { useChain } from "../context/ChainContext";
+import { entityColor } from "../lib/entityColor";
 import { projectHealth } from "../lib/workbenchState";
 import type { ChainSeverity } from "../lib/tauri";
 import { AddProjectDialog } from "./AddProjectDialog";
@@ -46,11 +45,8 @@ export function Sidebar() {
   } | null>(null);
   const selectedProjectPath = new URLSearchParams(location.search).get("project");
 
-  // 底部常驻：出问题才去的诊断、技能源，以及多机与设置。它们不在日常动线上，
-  // 所以沉在最下面 —— 但它们是真正的目的地，不再是主屏里的页内标签。
+  // 诊断与技能源在岛头页签里；侧栏底部只保留跨工作台的目的地。
   const footerItems = [
-    { name: t("sidebar.doctor"), path: "/doctor", icon: Stethoscope },
-    { name: t("sidebar.sources"), path: "/sources", icon: GitBranch },
     { name: t("sidebar.fleet"), path: "/fleet", icon: MonitorSmartphone },
     { name: t("sidebar.settings"), path: "/settings", icon: Settings },
   ];
@@ -76,7 +72,7 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="app-glass-chrome relative z-10 flex h-full w-[220px] flex-shrink-0 select-none flex-col border-r border-glass-hairline">
+      <div className="relative z-10 flex h-full w-[220px] flex-shrink-0 select-none flex-col">
         {/* Clears the overlay titlebar plus a little breathing room. On Windows
             --titlebar-h is 0, leaving just the breathing room under the native
             caption bar. */}
@@ -96,7 +92,7 @@ export function Sidebar() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("sidebar.filterProjects")}
               aria-label={t("sidebar.filterProjects")}
-              className="h-7 w-full rounded-[5px] border border-glass-hairline bg-glass-soft pl-7 pr-2 text-[12.5px] text-secondary outline-none transition-colors placeholder:text-faint focus:border-accent-border"
+              className="h-7 w-full rounded-[5px] border border-border-subtle bg-surface pl-7 pr-2 text-[12.5px] text-secondary outline-none transition-colors placeholder:text-faint focus:border-accent-border"
             />
           </div>
         </div>
@@ -111,7 +107,7 @@ export function Sidebar() {
                   key={project.id}
                   className={cn(
                     "group relative flex items-center rounded-[5px] transition-colors",
-                    isActive ? "bg-glass-strong" : "hover:bg-glass-soft",
+                    isActive ? "bg-surface-active" : "hover:bg-surface-hover",
                   )}
                 >
                   <button
@@ -122,12 +118,8 @@ export function Sidebar() {
                     )}
                   >
                     <span
-                      className={cn(
-                        "flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded border",
-                        isActive
-                          ? "border-accent/30 bg-accent/10 text-accent"
-                          : "border-glass-hairline bg-glass-soft text-muted",
-                      )}
+                      className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded"
+                      style={entityColor(project.name)}
                     >
                       <Link2 className="h-3 w-3" />
                     </span>
@@ -165,14 +157,14 @@ export function Sidebar() {
 
           <button
             onClick={() => setShowAddProject(true)}
-            className="mt-1 flex w-full items-center gap-2 rounded-[5px] px-2.5 py-[7px] text-sm text-muted transition-colors outline-none hover:bg-glass-soft hover:text-secondary"
+            className="mt-1 flex w-full items-center gap-2 rounded-[5px] px-2.5 py-[7px] text-sm text-muted transition-colors outline-none hover:bg-surface-hover hover:text-secondary"
           >
             <Plus className="h-3.5 w-3.5" />
             {t("sidebar.addProject")}
           </button>
         </div>
 
-        <div className="shrink-0 space-y-0.5 border-t border-glass-hairline p-2.5">
+        <div className="shrink-0 space-y-0.5 border-t border-hairline p-2.5">
           {footerItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -183,8 +175,8 @@ export function Sidebar() {
                 className={cn(
                   "flex items-center gap-2.5 rounded-[5px] px-2.5 py-[7px] text-sm font-medium transition-colors outline-none",
                   isActive
-                    ? "bg-glass-strong text-primary"
-                    : "text-tertiary hover:bg-glass-soft hover:text-secondary",
+                    ? "bg-surface-active text-primary"
+                    : "text-tertiary hover:bg-surface-hover hover:text-secondary",
                 )}
               >
                 <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-accent" : "text-muted")} />

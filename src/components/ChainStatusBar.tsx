@@ -51,10 +51,10 @@ export function ChainStatusBar() {
         data-testid="chain-status-bar"
         data-guard={guardState}
         className={cn(
-          "flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border px-3.5 py-2 text-[12.5px]",
+          "flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-hairline px-5 py-2 text-[12.5px]",
           guardState === "violation"
-            ? "border-red-500/30 bg-red-500/[0.07]"
-            : "border-glass-hairline bg-glass-soft",
+            ? "bg-red-500/[0.07]"
+            : "bg-bg-secondary",
         )}
       >
         {guardState === "unknown" ? (

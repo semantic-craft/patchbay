@@ -47,7 +47,7 @@ export function InstructionsPanel({ instrProject, planning, onNormalize, onInit 
   };
 
   return (
-    <div data-testid="instructions-panel" className="app-glass-card overflow-hidden">
+    <div data-testid="instructions-panel" className="app-panel overflow-hidden">
       <button
         data-testid="instructions-toggle"
         aria-expanded={expanded}
@@ -93,7 +93,7 @@ export function InstructionsPanel({ instrProject, planning, onNormalize, onInit 
       </button>
 
       {!expanded ? null : (
-      <div className="space-y-3 border-t border-glass-hairline p-4">
+      <div className="space-y-3 border-t border-hairline p-4">
       <div className="flex flex-wrap items-center justify-end gap-3">
           <span className="flex items-center gap-3 text-[10.5px] text-muted">
             <span className="flex items-center gap-1">

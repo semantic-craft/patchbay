@@ -28,7 +28,7 @@ export function ProjectStatusLine({ project, count, green }: ProjectStatusLinePr
     <div
       data-testid="workbench-status-line"
       data-state={green ? "green" : "unknown"}
-      className="app-glass-card flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-[12.5px]"
+      className="app-panel flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-[12.5px]"
     >
       {green && (
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
@@ -39,7 +39,7 @@ export function ProjectStatusLine({ project, count, green }: ProjectStatusLinePr
         {t("chain.workbench.linkCount", { count })}
       </span>
 
-      <span className="h-3 w-px bg-glass-hairline" />
+      <span className="h-3 w-px bg-hairline" />
 
       <span className="font-mono text-[11.5px] text-muted">
         {project.agents_dir

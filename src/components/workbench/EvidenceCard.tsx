@@ -110,7 +110,7 @@ export function EvidenceCard({
       data-testid="evidence-card"
       data-deviation={finding.deviation}
       data-severity={finding.severity}
-      className="app-glass-card flex gap-3 px-4 py-3.5"
+      className="app-panel flex gap-3 px-4 py-3.5"
     >
       <span className={cn("w-1 shrink-0 self-stretch rounded-full", STRIPE[finding.severity])} />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">

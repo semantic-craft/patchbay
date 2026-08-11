@@ -57,7 +57,7 @@ export function RepairRecordCard({ record, onUndone, onDismissed }: RepairRecord
   };
 
   return (
-    <div data-testid="repair-record" className="app-glass-card flex gap-3 px-4 py-3.5">
+    <div data-testid="repair-record" className="app-panel flex gap-3 px-4 py-3.5">
       <span
         className={cn(
           "w-1 shrink-0 self-stretch rounded-full",

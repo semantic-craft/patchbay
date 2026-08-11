@@ -23,9 +23,9 @@ function applyThemeClass(resolved: ResolvedTheme) {
 }
 
 /**
- * Keep the native window appearance in step with the app theme so the
- * window-level glass material (#37) and title bar never mismatch the UI.
- * `null` hands the window back to the OS when the user picks "system".
+ * Keep the native window appearance in step with the app theme so the title
+ * bar never mismatches the UI. `null` hands the window back to the OS when
+ * the user picks "system".
  */
 function syncWindowTheme(theme: Theme, resolved: ResolvedTheme) {
   try {

@@ -30,7 +30,7 @@ export function QuietFindings({ findings, onViewDiagnosis }: QuietFindingsProps)
   if (findings.length === 0) return null;
 
   return (
-    <div data-testid="quiet-findings" className="app-glass-card overflow-hidden">
+    <div data-testid="quiet-findings" className="app-panel overflow-hidden">
       <button
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
@@ -45,12 +45,12 @@ export function QuietFindings({ findings, onViewDiagnosis }: QuietFindingsProps)
       </button>
 
       {expanded && (
-        <div className="border-t border-glass-hairline">
+        <div className="border-t border-hairline">
           {findings.map((finding) => (
             <div
               key={finding.fingerprint}
               data-testid="quiet-finding"
-              className="flex items-center gap-2.5 border-b border-glass-hairline px-4 py-2 text-[12px] last:border-b-0"
+              className="flex items-center gap-2.5 border-b border-hairline px-4 py-2 text-[12px] last:border-b-0"
             >
               <span
                 className={cn(

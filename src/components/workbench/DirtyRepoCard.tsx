@@ -60,7 +60,7 @@ export function DirtyRepoCard({ repo }: DirtyRepoCardProps) {
   };
 
   return (
-    <div data-testid="dirty-repo-card" data-repo={repo.path} className="app-glass-card flex gap-3 px-4 py-3.5">
+    <div data-testid="dirty-repo-card" data-repo={repo.path} className="app-panel flex gap-3 px-4 py-3.5">
       <span className="w-1 shrink-0 self-stretch rounded-full bg-amber-400" />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">

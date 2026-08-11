@@ -15,15 +15,10 @@ export default {
         'surface-active': 'var(--color-surface-active)',
         border: 'var(--color-border)',
         'border-subtle': 'var(--color-border-subtle)',
-        // Liquid Glass chrome materials; composites live in index.css as
-        // .app-glass-* (they carry blur, highlight and shadow too).
-        glass: {
-          DEFAULT: 'var(--glass)',
-          soft: 'var(--glass-soft)',
-          strong: 'var(--glass-strong)',
-          border: 'var(--glass-border)',
-          hairline: 'var(--glass-hairline)',
-        },
+        // Island 设计系统的分界线：hairline 是岛内分隔线，island-border 是
+        // 岛的描边（.app-island 组合类在 index.css）。
+        hairline: 'var(--color-hairline)',
+        'island-border': 'var(--color-island-border)',
         accent: {
           DEFAULT: 'var(--color-accent)',
           light: 'var(--color-accent-light)',
@@ -35,6 +30,9 @@ export default {
           DEFAULT: 'var(--color-danger)',
           bg: 'var(--color-danger-bg)',
         },
+      },
+      boxShadow: {
+        island: 'var(--island-shadow)',
       },
       textColor: {
         primary: 'var(--color-text-primary)',

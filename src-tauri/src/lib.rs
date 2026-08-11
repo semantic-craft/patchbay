@@ -329,35 +329,6 @@ pub fn run() {
             let step = Instant::now();
             let win = app.get_webview_window("main").unwrap();
 
-            // Window-level glass (#37): apply once behind the webview and
-            // record which tier actually took effect. The frontend only drops
-            // its opaque CSS wallpaper when a native material is really there,
-            // so a failed apply degrades to the pre-#37 look instead of a bare
-            // transparent window.
-            #[cfg(target_os = "macos")]
-            {
-                use tauri_plugin_liquid_glass::LiquidGlassExt;
-                app.handle().plugin(tauri_plugin_liquid_glass::init())?;
-                let supported = app.liquid_glass().is_supported();
-                let apply_ok = match app.liquid_glass().set_effect(
-                    &win,
-                    tauri_plugin_liquid_glass::LiquidGlassConfig::default(),
-                ) {
-                    Ok(()) => true,
-                    Err(err) => {
-                        log::warn!("window glass apply failed, keeping CSS wallpaper: {err}");
-                        false
-                    }
-                };
-                let tier = commands::window_glass::resolve_tier(true, supported, apply_ok);
-                commands::window_glass::record_tier(tier);
-                log::info!("startup: window glass tier = {tier}");
-            }
-            #[cfg(not(target_os = "macos"))]
-            commands::window_glass::record_tier(commands::window_glass::resolve_tier(
-                false, false, false,
-            ));
-
             let win_for_event = win.clone();
             win.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -454,8 +425,6 @@ pub fn run() {
             commands::projects::add_linked_workspace,
             commands::projects::remove_project,
             commands::projects::scan_projects,
-            // Window glass
-            commands::window_glass::window_glass_status,
             // Settings and diagnostics
             commands::settings::get_settings,
             commands::settings::set_settings,

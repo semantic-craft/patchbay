@@ -43,7 +43,7 @@ export function ChainPresetBar({ presets, currentSkills, onChanged }: ChainPrese
   return (
     <div
       data-testid="chain-preset-bar"
-      className="app-glass-card flex flex-wrap items-center gap-2 px-4 py-2.5"
+      className="app-panel flex flex-wrap items-center gap-2 px-4 py-2.5"
     >
       <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-muted">
         <Package className="h-3.5 w-3.5" />
@@ -54,7 +54,7 @@ export function ChainPresetBar({ presets, currentSkills, onChanged }: ChainPrese
         <span
           key={preset.id}
           data-testid="preset-pill"
-          className="group flex items-center gap-1.5 rounded-full border border-glass-hairline bg-glass-strong px-3 py-1 text-[12px] font-medium text-secondary"
+          className="group flex items-center gap-1.5 rounded-full border border-hairline bg-surface-active px-3 py-1 text-[12px] font-medium text-secondary"
         >
           {preset.name}
           <span className="text-[10.5px] text-muted">
@@ -83,7 +83,7 @@ export function ChainPresetBar({ presets, currentSkills, onChanged }: ChainPrese
         data-testid="preset-save-current"
         onClick={() => setDialog({ mode: "save" })}
         disabled={currentSkills.length === 0}
-        className="flex items-center gap-1 rounded-full border border-glass-hairline bg-glass-soft px-3 py-1 text-[12px] font-medium text-muted transition-colors hover:text-secondary disabled:opacity-50"
+        className="flex items-center gap-1 rounded-full border border-hairline bg-surface-hover px-3 py-1 text-[12px] font-medium text-muted transition-colors hover:text-secondary disabled:opacity-50"
       >
         <Plus className="h-3 w-3" />
         {t("chain.workbench.presetSaveCurrent", { count: currentSkills.length })}
@@ -150,10 +150,11 @@ function PresetNameDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="app-dialog-layer">
+      <div className="app-dialog-backdrop" onClick={onClose} />
       <div
         data-testid="preset-name-dialog"
-        className="app-glass-card w-[360px] space-y-3 p-4"
+        className="app-dialog w-full max-w-[360px] space-y-3 p-4"
       >
         <div className="flex items-center justify-between">
           <span className="text-[13.5px] font-semibold text-primary">{title}</span>

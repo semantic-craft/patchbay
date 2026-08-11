@@ -171,6 +171,7 @@
     }
   },
   "chain": {
+    "overviewTitle": "链路总览",
     "rootsTitle": "原始仓库根目录",
     "rootsHint": "扫描原始仓库（Skill 仓库的 git 检出）的目录。按顺序扫描；重复的根只扫描一次。",
     "rootAdd": "添加根目录…",
@@ -182,6 +183,7 @@
     "rootsEmpty": "未配置根目录——使用默认值。",
     "rootSource": "根目录：{{name}}",
     "reposCount": "{{count}} 个仓库",
+    "overviewSubtitle": "原件仓库 → 项目 .agents/skills → Agent 入口链；全局面保持为空",
     "projectsTitle": "项目链路",
     "projectsSubtitle": "每个项目的技能链清单与 Agent 入口状态 — 可为各项目挂接与断开技能",
     "workbench": {
@@ -338,6 +340,10 @@
     "dirLinkOk": "目录链 ✓",
     "dirLinkBad": "目录链异常",
     "noAgg": "无 .agents/skills",
+    "tierRepos": "① 技能源",
+    "tierAgg": "② 项目 .agents/skills",
+    "tierSurfaces": "③ Agent 入口",
+    "detailHint": "点击任一节点查看逐跳解析",
     "location": "位置",
     "skill": "技能",
     "chainCol": "解析链",
@@ -539,6 +545,9 @@
     "noAgents": "未安装 agent",
     "projectSegment": "项目",
     "globalSegment": "全局",
+    "costBarTitle": "Instructions 成本",
+    "costBarHint": "各 Agent 全局面常驻 token——点击查看逐项目明细",
+    "costBarEmpty": "无全局 Instructions",
     "doctor": {
       "subtitle": "并列诊断技能链与 instructions 规则 — 共用严重度筛选，并按模块筛选类型",
       "clean": "未发现技能链或 instructions 偏差。所有纳管面均符合规范。",
@@ -823,5 +832,11 @@
     "addSelected": "添加选中 ({{count}})",
     "selectAll": "全选",
     "deselectAll": "取消全选"
+  },
+  "home": {
+    "tabWorkbench": "项目工作台",
+    "tabChain": "链路",
+    "tabDoctor": "诊断",
+    "tabWarehouse": "开发源"
   }
 }
