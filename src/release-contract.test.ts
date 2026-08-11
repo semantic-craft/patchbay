@@ -67,16 +67,15 @@ describe("Patchbay release contract", () => {
     const config = JSON.parse(read("src-tauri/tauri.conf.json"));
 
     expect(config.bundle.createUpdaterArtifacts).toBe(true);
-    // Base config stays macOS-only. Windows is added by a platform overlay, not
-    // by widening this list — that is what keeps the macOS release contract
-    // byte-identical while Windows ships.
+    // Base config stays macOS-only. The Windows development/test overlay does
+    // not widen the published Apple Silicon release contract.
     expect(config.bundle.targets).toEqual(["app", "dmg"]);
     expect(config.plugins.updater.endpoints).toEqual([
       "https://github.com/semantic-craft/patchbay/releases/latest/download/latest.json",
     ]);
   });
 
-  it("ships Windows through a platform overlay, unsigned but auto-updatable", () => {
+  it("keeps the Windows development overlay internally consistent", () => {
     const windows = JSON.parse(read("src-tauri/tauri.windows.conf.json"));
 
     // Tauri merges tauri.<platform>.conf.json over the base, so this replaces
@@ -161,6 +160,7 @@ describe("Patchbay release contract", () => {
     expect(workflow).not.toContain("patchbay-releases");
     expect(workflow).not.toContain("create-github-app-token");
     expect(workflow).not.toContain("PATCHBAY_RELEASE_APP");
+    expect(workflow).not.toContain("PATCHBAY_GITHUB_APP_CLIENT_ID");
     expect(workflow).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain('--repo "$RELEASE_REPOSITORY"');
@@ -170,11 +170,26 @@ describe("Patchbay release contract", () => {
     expect(workflow).toContain("xcrun stapler validate");
     expect(workflow).toContain("spctl --assess");
     expect(workflow).toContain("minisign -Vm");
-    // Every shipped platform is verified before the release leaves draft, and
-    // the Windows artifact is checked from the macOS runner: the loop derives
-    // the asset from the metadata URL, so minisign does not care who built it.
-    for (const platform of ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"]) {
+    for (const asset of [
+      "latest.json",
+      "Patchbay_${version}_aarch64.dmg",
+      "Patchbay_aarch64.app.tar.gz",
+      "Patchbay_aarch64.app.tar.gz.sig",
+    ]) {
+      expect(workflow).toContain(asset);
+    }
+    expect(workflow).toContain("Release must remain draft until updater validation passes");
+    expect(workflow).toContain("Unexpected release assets");
+    expect(workflow).toContain("Unexpected updater platforms");
+    expect(workflow).toContain("actual_platforms=");
+    // The release surface is Apple Silicon only. Both updater aliases must be
+    // present and verified before the release leaves draft, while retired
+    // Intel and Windows publication paths must not remain in the workflow.
+    for (const platform of ["darwin-aarch64", "darwin-aarch64-app"]) {
       expect(workflow).toContain(platform);
+    }
+    for (const platform of ["darwin-x86_64", "windows-x86_64"]) {
+      expect(workflow).not.toContain(platform);
     }
     expect(workflow).not.toContain("linux-x86_64");
     expect(workflow).not.toContain("Linux-x64");
@@ -193,12 +208,11 @@ describe("Patchbay release contract", () => {
     expect(releaseWorkflow).not.toContain("self-hosted");
     expect(prepareWorkflow).not.toContain("self-hosted");
 
-    // Signing and notarization need macOS; macos-14 is Apple Silicon and builds
-    // both the arm64 target natively and the x86_64 target by cross-compile.
+    // Signing and notarization need macOS; macos-14 builds the sole Apple
+    // Silicon release target natively.
     expect(releaseWorkflow).toContain("runs-on: macos-14");
-    expect(releaseWorkflow).toContain("runs-on: windows-latest");
-    // Both macOS legs upload into one draft release, so they must not race.
-    expect(releaseWorkflow).toContain("max-parallel: 1");
+    expect(releaseWorkflow).not.toContain("runs-on: windows-latest");
+    expect(releaseWorkflow).not.toContain("max-parallel: 1");
     expect(releaseWorkflow).toContain('CI: "true"');
     expect(releaseWorkflow).toContain("retryAttempts: 2");
 

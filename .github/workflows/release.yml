@@ -29,7 +29,6 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}
     steps:
       - name: Check secret presence without printing values
         shell: bash
@@ -50,10 +49,6 @@ jobs:
               missing=1
             fi
           done
-          if [ -z "$PATCHBAY_GITHUB_APP_CLIENT_ID" ]; then
-            echo "::error::Missing required repository variable: PATCHBAY_GITHUB_APP_CLIENT_ID"
-            missing=1
-          fi
           exit "$missing"
 
   verify:
@@ -110,22 +105,11 @@ jobs:
 
   build:
     needs: [release-secrets, verify]
-    strategy:
-      fail-fast: false
-      # Both legs upload into one draft release, and only the first to arrive
-      # creates it — so they must not race.
-      max-parallel: 1
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            label: macOS-arm64
-          - target: x86_64-apple-darwin
-            label: macOS-x64
-
-    # macos-14 is Apple Silicon; it builds the arm64 target natively and
-    # cross-compiles the x86_64 target. GitHub-hosted, free for public repos.
+    # macos-14 is Apple Silicon and builds the sole release target natively.
+    # Development remains cross-platform; the published desktop surface is
+    # intentionally macOS arm64-only.
     runs-on: macos-14
-    name: Build (${{ matrix.label }})
+    name: Build (macOS-arm64)
     # The built-in token replaces the App token, so the publishing jobs need
     # write access granted explicitly. Every other job stays read-only.
     permissions:
@@ -145,7 +129,7 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
-          targets: ${{ matrix.target }}
+          targets: aarch64-apple-darwin
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
@@ -175,7 +159,7 @@ jobs:
             echo ""
             echo "### 当前校验状态"
             echo ""
-            echo "- ✅ macOS 构建通过（Intel / Apple Silicon）"
+            echo "- ✅ macOS arm64 构建、签名与公证通过（Apple Silicon）"
             echo "- ✅ TypeScript typecheck 通过"
             echo ""
             echo "---"
@@ -188,7 +172,7 @@ jobs:
             echo ""
             echo "### Current Verification"
             echo ""
-            echo "- ✅ macOS build passed (Intel / Apple Silicon)"
+            echo "- ✅ macOS arm64 build, signing, and notarization passed (Apple Silicon)"
             echo "- ✅ TypeScript typecheck passed"
             echo ""
             echo "</details>"
@@ -231,7 +215,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}
         with:
           tagName: v__VERSION__
           releaseCommitish: main
@@ -241,7 +224,7 @@ jobs:
           prerelease: false
           updaterJsonKeepUniversal: true
           retryAttempts: 2
-          args: --target ${{ matrix.target }}
+          args: --target aarch64-apple-darwin
 
       - name: Verify signed and notarized macOS bundles
         env:
@@ -251,8 +234,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          APP_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Patchbay.app"
-          DMG_PATH=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'Patchbay_*.dmg' -print -quit)
+          APP_PATH="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Patchbay.app"
+          DMG_PATH=$(find "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg" -maxdepth 1 -name 'Patchbay_*.dmg' -print -quit)
           if [ ! -d "$APP_PATH" ]; then
             echo "Expected app bundle not found at $APP_PATH" >&2
             exit 1
@@ -290,73 +273,8 @@ jobs:
             exit 1
           fi
 
-  # Windows is a separate job rather than a matrix row, because the macOS build
-  # body is macOS all the way down — the keychain dance,
-  # codesign/notarytool/stapler/spctl — with no `if:` guards to reuse.
-  #
-  # `needs: build` serialises it behind macOS for the same reason the macOS
-  # matrix runs `max-parallel: 1`: both legs upload into one draft release, and
-  # only the first to arrive creates it. Running second also means the release
-  # body already exists, so this job needs no changelog step.
-  #
-  # NOT SIGNED. The NSIS installer ships unsigned until a code-signing
-  # certificate exists, so Windows shows a SmartScreen warning on first run.
-  # Auto-update still works: the updater verifies minisign, not Authenticode,
-  # and TAURI_SIGNING_PRIVATE_KEY is platform-agnostic. To sign later, add
-  # `bundle.windows.certificateThumbprint` to tauri.windows.conf.json and supply
-  # the certificate as a secret — deliberately not half-wired here, because an
-  # untested signing path that silently no-ops is worse than its absence.
-  build-windows:
-    needs: [release-secrets, verify, build]
-    runs-on: windows-latest
-    name: Build (Windows-x64)
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          workspaces: src-tauri
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      # tauri.windows.conf.json narrows bundle.targets to nsis here, so this
-      # produces the installer plus the .nsis.zip updater artifact and its .sig.
-      - name: Build with Tauri
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
-        env:
-          CI: "true"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          PATCHBAY_GITHUB_APP_CLIENT_ID: ${{ vars.PATCHBAY_GITHUB_APP_CLIENT_ID }}
-        with:
-          tagName: v__VERSION__
-          releaseCommitish: main
-          releaseDraft: true
-          prerelease: false
-          retryAttempts: 2
-          args: --target x86_64-pc-windows-msvc
-
   verify-updater-assets:
-    needs: [build, build-windows]
+    needs: [build]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: macos-14
     name: Verify updater assets
@@ -384,14 +302,20 @@ jobs:
             --json assets,isDraft,tagName)
 
           asset_names=$(echo "$release_json" | jq -r '.assets[]?.name')
-
-          if ! echo "$asset_names" | grep -qx 'latest.json'; then
-            echo "Missing updater metadata asset: latest.json"
+          version=$(node -p "require('./package.json').version")
+          expected_assets=$(printf '%s\n' \
+            'latest.json' \
+            "Patchbay_${version}_aarch64.dmg" \
+            'Patchbay_aarch64.app.tar.gz' \
+            'Patchbay_aarch64.app.tar.gz.sig' | sort)
+          actual_assets=$(printf '%s\n' "$asset_names" | sed '/^$/d' | sort)
+          if [ "$actual_assets" != "$expected_assets" ]; then
+            echo "Unexpected release assets"
+            printf 'Expected:\n%s\nActual:\n%s\n' "$expected_assets" "$actual_assets"
             exit 1
           fi
-
-          if ! echo "$asset_names" | grep -q '\.sig'; then
-            echo "Missing updater signature assets (*.sig)"
+          if ! echo "$release_json" | jq -e '.isDraft == true' >/dev/null; then
+            echo "Release must remain draft until updater validation passes"
             exit 1
           fi
 
@@ -405,13 +329,19 @@ jobs:
           jq -r '.plugins.updater.pubkey' src-tauri/tauri.conf.json \
             | base64 --decode > /tmp/patchbay-updater.pub
 
-          # windows-x86_64 verifies from this macOS runner: the loop derives the
-          # asset name from the metadata URL and checks it with minisign, none
-          # of which cares which platform produced the artifact.
+          expected_platforms=$(printf '%s\n' \
+            darwin-aarch64 \
+            darwin-aarch64-app | sort)
+          actual_platforms=$(jq -r '.platforms | keys[]' /tmp/latest.json | sort)
+          if [ "$actual_platforms" != "$expected_platforms" ]; then
+            echo "Unexpected updater platforms"
+            printf 'Expected:\n%s\nActual:\n%s\n' "$expected_platforms" "$actual_platforms"
+            exit 1
+          fi
+
           for platform in \
             darwin-aarch64 \
-            darwin-x86_64 \
-            windows-x86_64; do
+            darwin-aarch64-app; do
             if ! jq -e --arg platform "$platform" \
               '.platforms[$platform].signature and .platforms[$platform].url' \
               /tmp/latest.json >/dev/null; then
