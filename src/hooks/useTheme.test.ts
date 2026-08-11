@@ -39,6 +39,12 @@ describe("useTheme native window sync", () => {
     document.documentElement.classList.remove("dark");
   });
 
+  it("defaults to the light theme when the user has no saved preference", () => {
+    const { result } = renderHook(() => useTheme());
+
+    expect(result.current.theme).toBe("light");
+  });
+
   it("forces the native window dark when the stored theme is dark", async () => {
     localStorage.setItem("theme", "dark");
     renderHook(() => useTheme());
