@@ -86,9 +86,9 @@ export function RemediateDialog({ open, violation, agent, projects, onClose, onD
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={close} />
-      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-2xl">
+    <div className="app-dialog-layer">
+      <div className="app-dialog-backdrop" onClick={close} />
+      <div className="app-dialog w-full max-w-md p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold text-primary">
             <ShieldAlert className="h-4 w-4 text-red-400" />
@@ -131,7 +131,7 @@ export function RemediateDialog({ open, violation, agent, projects, onClose, onD
                   className={cn(
                     "rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium transition-colors outline-none",
                     agents.has(agent)
-                      ? "border-blue-500/40 bg-blue-500/10 text-blue-300"
+                      ? "border-accent-border bg-accent-bg text-accent-dark"
                       : "border-border-subtle text-muted"
                   )}
                 >
@@ -143,14 +143,14 @@ export function RemediateDialog({ open, violation, agent, projects, onClose, onD
             <div className="flex justify-end gap-2">
               <button
                 onClick={close}
-                className="rounded-[4px] px-3 py-1.5 text-[13px] font-medium text-tertiary outline-none hover:bg-surface-hover hover:text-secondary"
+                className="app-button-secondary h-8 px-3"
               >
                 {t("common.cancel")}
               </button>
               <button
                 onClick={preview}
                 disabled={loading || !projectPath || agents.size === 0}
-                className="rounded-[4px] bg-blue-600 px-3 py-1.5 text-[13px] font-medium text-white outline-none disabled:opacity-40"
+                className="app-button-primary h-8 px-3"
               >
                 {t("chain.remediate.preview")}
               </button>
@@ -175,14 +175,14 @@ export function RemediateDialog({ open, violation, agent, projects, onClose, onD
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setPlan(null)}
-                className="rounded-[4px] px-3 py-1.5 text-[13px] font-medium text-tertiary outline-none hover:bg-surface-hover hover:text-secondary"
+                className="app-button-secondary h-8 px-3"
               >
                 {t("chain.remediate.back")}
               </button>
               <button
                 onClick={apply}
                 disabled={loading || (!plan.remove_global && !plan.link_plan)}
-                className="rounded-[4px] bg-blue-600 px-3 py-1.5 text-[13px] font-medium text-white outline-none disabled:opacity-40"
+                className="app-button-primary h-8 px-3"
               >
                 {t("chain.remediate.apply")}
               </button>

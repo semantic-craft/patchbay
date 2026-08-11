@@ -119,9 +119,9 @@ export function AddProjectDialog({ open, onClose, onAdded }: Props) {
     "w-full bg-background border border-border-subtle rounded-[4px] px-3 py-2 text-[13px] text-secondary focus:outline-none focus:border-border transition-all placeholder-faint";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-surface border border-border rounded-xl w-full max-w-[480px] p-5 shadow-2xl">
+    <div className="app-dialog-layer">
+      <div className="app-dialog-backdrop" onClick={onClose} />
+      <div className="app-dialog w-full max-w-[480px] p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[13px] font-semibold text-primary">
             {t("project.addProjectTitle")}
@@ -193,7 +193,7 @@ export function AddProjectDialog({ open, onClose, onAdded }: Props) {
               <button
                 onClick={handleScan}
                 disabled={!scanRoot.trim() || scanning}
-                className="px-3 py-1.5 rounded-[4px] bg-accent-dark hover:bg-accent text-white text-[13px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-accent-border outline-none"
+                className="app-button-primary h-9 px-3"
               >
                 {scanning ? (
                   t("project.scanning")
@@ -260,7 +260,7 @@ export function AddProjectDialog({ open, onClose, onAdded }: Props) {
                   <button
                     onClick={handleAddSelected}
                     disabled={selected.size === 0 || adding}
-                    className="px-3 py-1.5 rounded-[4px] bg-accent-dark hover:bg-accent text-white text-[13px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-accent-border outline-none"
+                    className="app-button-primary h-8 px-3"
                   >
                     {adding
                       ? t("common.loading")
@@ -307,7 +307,7 @@ export function AddProjectDialog({ open, onClose, onAdded }: Props) {
             <button
               onClick={handleAddLinkedWorkspace}
               disabled={adding || !linkedName.trim() || !linkedPath.trim()}
-              className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg border border-dashed border-border-subtle hover:border-border bg-background text-[13px] text-tertiary hover:text-secondary transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="app-button-primary w-full"
             >
               <FolderOpen className="w-4 h-4 text-muted" />
               {adding ? t("common.loading") : t("project.addLinkedWorkspace")}

@@ -37,6 +37,9 @@
     --color-accent-border: rgba(5, 150, 105, 0.25);
     --color-danger: #dc2626;
     --color-danger-bg: rgba(220, 38, 38, 0.08);
+    --color-danger-hover: rgba(220, 38, 38, 0.16);
+    --color-dialog-overlay: rgba(20, 21, 26, 0.34);
+    --dialog-shadow: 0 2px 8px rgba(20, 21, 26, 0.08), 0 20px 56px rgba(20, 21, 26, 0.18);
     /* Height of the drag strip the app draws where the OS hides its title bar.
        macOS uses titleBarStyle "Overlay"; Windows keeps a native caption bar,
        so the strip collapses there (see [data-platform="windows"] below) and
@@ -68,6 +71,9 @@
     --color-accent-border: rgba(52, 211, 153, 0.25);
     --color-danger: #ef4444;
     --color-danger-bg: rgba(239, 68, 68, 0.08);
+    --color-danger-hover: rgba(239, 68, 68, 0.16);
+    --color-dialog-overlay: rgba(0, 0, 0, 0.58);
+    --dialog-shadow: 0 2px 10px rgba(0, 0, 10, 0.32), 0 22px 60px rgba(0, 0, 10, 0.5);
   }
 
   /* System preference fallback (when no .dark class and user chose "system") */
@@ -164,6 +170,22 @@
     @apply rounded-xl border border-border-subtle bg-bg-secondary;
   }
 
+  /* 对话框是岛上方唯一允许再抬高的一层：用不透明遮罩和单一投影分层，
+     不模糊背后的画布，也不引入另一套材质。 */
+  .app-dialog-layer {
+    @apply fixed inset-0 z-50 flex items-center justify-center px-5 py-8;
+  }
+
+  .app-dialog-backdrop {
+    @apply absolute inset-0;
+    background: var(--color-dialog-overlay);
+  }
+
+  .app-dialog {
+    @apply relative rounded-xl border border-border-subtle bg-surface;
+    box-shadow: var(--dialog-shadow);
+  }
+
   .app-toolbar {
     @apply flex flex-wrap items-center justify-between gap-3;
   }
@@ -197,6 +219,16 @@
 
   .app-button-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-full border border-border-subtle bg-surface px-4 py-2.5 text-[13px] font-medium text-secondary transition-colors outline-none hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .app-button-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-medium transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+  }
+
+  .app-button-danger:hover:not(:disabled) {
+    background: var(--color-danger-hover);
   }
 
   .app-badge {

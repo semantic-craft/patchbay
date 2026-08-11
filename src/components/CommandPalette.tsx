@@ -235,13 +235,14 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/30 pt-[14vh] backdrop-blur-[2px]"
+      className="app-dialog-layer z-[60] items-start pt-[14vh]"
       onClick={close}
     >
+      <div className="app-dialog-backdrop" />
       <div
         role="dialog"
         aria-label="Command palette"
-        className="w-[min(640px,92vw)] overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-2xl"
+        className="app-dialog w-[min(640px,92vw)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >

@@ -39,9 +39,9 @@ export function ConfirmDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-surface border border-border rounded-xl w-full max-w-sm p-5 shadow-2xl">
+    <div className="app-dialog-layer">
+      <div className="app-dialog-backdrop" onClick={onClose} />
+      <div className="app-dialog w-full max-w-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[13px] font-semibold text-primary flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -69,7 +69,7 @@ export function ConfirmDialog({
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-[4px] text-[13px] font-medium text-tertiary hover:text-secondary hover:bg-surface-hover transition-colors outline-none"
+            className="app-button-secondary h-8 px-3"
           >
             {t("common.cancel")}
           </button>
@@ -79,8 +79,8 @@ export function ConfirmDialog({
             disabled={loading}
             className={
               tone === "warning"
-                ? "px-3 py-1.5 rounded-[4px] bg-accent-dark hover:bg-accent text-white text-[13px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-accent-border outline-none"
-                : "px-3 py-1.5 rounded-[4px] bg-red-600/90 hover:bg-red-500 text-white text-[13px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-red-500/50 outline-none"
+                ? "app-button-primary h-8 px-3"
+                : "app-button-danger h-8 px-3"
             }
           >
             {loading ? t("common.loading") : confirmLabel || t("common.delete")}

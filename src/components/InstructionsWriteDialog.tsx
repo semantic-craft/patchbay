@@ -126,9 +126,9 @@ export function InstructionsWriteDialog({
   const succeeded = outcome?.verified && outcome.items.every((item) => item.action !== "conflict");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={close} />
-      <div className="relative flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-surface p-5 shadow-2xl">
+    <div className="app-dialog-layer">
+      <div className="app-dialog-backdrop" onClick={close} />
+      <div className="app-dialog flex max-h-[80vh] w-full max-w-2xl flex-col p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold text-primary">
             <FilePenLine className="h-4 w-4 text-accent" />

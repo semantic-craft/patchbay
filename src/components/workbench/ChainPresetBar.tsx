@@ -150,10 +150,11 @@ function PresetNameDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="app-dialog-layer">
+      <div className="app-dialog-backdrop" onClick={onClose} />
       <div
         data-testid="preset-name-dialog"
-        className="app-panel w-[360px] space-y-3 p-4"
+        className="app-dialog w-full max-w-[360px] space-y-3 p-4"
       >
         <div className="flex items-center justify-between">
           <span className="text-[13.5px] font-semibold text-primary">{title}</span>
