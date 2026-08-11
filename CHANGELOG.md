@@ -8,13 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.1] - 2026-08-11
 
 ### Release Overview
-- 
+- Hardens chain repair after the 2.0 simplification and refreshes the PostCSS toolchain without changing Patchbay's product scope.
 
 ### User-facing
-- 
+- **Unavailable agent surfaces are no longer rewritten as if repaired.** A correctly targeted surface whose aggregate is missing, inaccessible, or temporarily unreadable is now reported as a conflict and left untouched.
 
 ### Developer & Governance
-- 
+- The relink transaction now restores another writer's concurrently replaced symlink when the final race check fails and the public path is still vacant, instead of stranding it under a hidden backup name.
+- `RepairDirLink` is restricted to the non-native Windows link shape it can actually correct; macOS and Windows regression tests cover both repair-safety fixes.
+- Updated PostCSS from 8.5.22 to 8.5.26, including its source-map path-protection fix and the corresponding Nano ID patch update.
+
 ## [Unreleased]
 
 ## [2.0.0] - 2026-08-11

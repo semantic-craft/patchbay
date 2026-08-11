@@ -16,13 +16,17 @@ push/PR via `test.yml`; the release pipeline runs only on version tags.
    fires on the merge, tags `vX.Y.Z` on the merge commit, and dispatches the
    release.
 3. **Build & Release** (`release.yml`) then runs on the tag:
-   - `macos-14` builds the Apple Silicon and (cross-compiled) Intel bundles,
-     signs them with the Developer ID cert, notarizes the DMG with `notarytool`,
-     and staples it.
-   - `windows-latest` builds the NSIS installer (unsigned; auto-update still
-     works via minisign).
-   - Artifacts publish to this repository as a draft release, which is
-     verified (checksums, updater signatures) and then flipped to latest.
+   - `macos-14` builds the Apple Silicon bundle, signs it with the Developer ID
+     cert, notarizes the DMG with `notarytool`, and staples it.
+   - The draft must contain exactly `latest.json`, the arm64 DMG, the arm64 app
+     archive, and its minisign signature. Both arm64 updater aliases are checked
+     against those assets before publication.
+   - Only after checksums, notarization, Gatekeeper, and updater signatures pass
+     is the draft flipped to the latest public release.
+
+The published desktop surface is intentionally macOS Apple Silicon-only.
+Development and test configurations may still cover other platforms, but this
+release workflow does not publish Intel macOS or Windows artifacts.
 
 The bump PR arrives without status checks: GitHub deliberately does not fire
 workflows for pull requests opened with `GITHUB_TOKEN`, and the only way around
@@ -49,12 +53,6 @@ release.
 | `APPLE_ID` | Apple ID for notarization |
 | `APPLE_PASSWORD` | app-specific password for notarization |
 | `APPLE_TEAM_ID` | Apple Developer Team ID |
-
-**Variables**
-
-| Name | Purpose |
-|------|---------|
-| `PATCHBAY_GITHUB_APP_CLIENT_ID` | client id of the in-app backup GitHub App |
 
 On a public repository, GitHub withholds these from fork-based pull requests, so
 they are exposed only to tag-triggered release runs from this repo.
