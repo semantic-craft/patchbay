@@ -86,8 +86,9 @@ describe("Patchbay release contract", () => {
     // already a silent downloadBootstrapper and NSIS installMode is already
     // currentUser, which is what keeps the installer elevation-free.
     expect(windows.bundle.windows).toBeUndefined();
-    // Transparency buys nothing off macOS — the glass tier resolves to "none" —
-    // and is fragile on WebView2 behind a decorated frame.
+    // Transparency is fragile on WebView2 behind a decorated frame. The base
+    // config is opaque too since the island canvas replaced window glass, so
+    // this is belt-and-braces: it pins Windows opaque independently.
     expect(windows.app.windows[0].transparent).toBe(false);
     expect(windows.app.windows[0].decorations).toBe(true);
     // titleBarStyle/hiddenTitle are macOS-only keys; carrying them here would

@@ -425,7 +425,6 @@ pub fn run() {
             commands::projects::add_linked_workspace,
             commands::projects::remove_project,
             commands::projects::scan_projects,
-            // Window glass
             // Settings and diagnostics
             commands::settings::get_settings,
             commands::settings::set_settings,
