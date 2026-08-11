@@ -23,7 +23,7 @@
 - `patchbay-cli` 保留 `chain`、`instructions`、`fleet`、`tools`，新增 `status`（数据目录与数据库路径），移除 `repo`、`skills`、`presets`、`git` 及 `--skills-root`。
 - `core::central_repo` 改名为 `core::app_dirs`，只负责应用自身状态（`~/.patchbay`）；`git_credentials` 保留钥匙串远端凭证，去掉 GitHub App 流程。
 - Liquid Glass 的 CSS token 与组合类、原生命令与插件、透明窗口配置均已删除，不保留兼容路径。
-- 净删减约 3.9 万行。Rust 与前端测试全绿（589 + 124 项）。
+- 净删减约 3.9 万行。Rust 与前端测试全绿（589 + 126 项）。
 
 ## [1.32.1] - 2026-07-29
 

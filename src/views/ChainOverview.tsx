@@ -1,10 +1,11 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ShieldCheck, ShieldAlert, FileText } from "lucide-react";
 import { cn } from "../utils";
 import type {
   ChainGuardViolation,
+  ChainRepo,
   ChainTracedEntry,
 } from "../lib/tauri";
 import { RemediateDialog } from "../components/RemediateDialog";
@@ -53,9 +54,39 @@ function countByStatus(entries: ChainTracedEntry[]): Map<string, number> {
   return m;
 }
 
+function normalizedPath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/\/+$/, "");
+}
+
+function pathIsWithin(path: string, parent: string): boolean {
+  const normalized = normalizedPath(path);
+  const base = normalizedPath(parent);
+  return normalized === base || normalized.startsWith(`${base}/`);
+}
+
+function repoNodeId(path: string): string {
+  return `repo:${normalizedPath(path)}`;
+}
+
+function aggregateNodeId(path: string): string {
+  return `agg:${normalizedPath(path)}`;
+}
+
+function surfaceNodeId(projectPath: string, agent: string): string {
+  return `surf:${normalizedPath(projectPath)}:${agent}`;
+}
+
+function entryRepoNodeId(entry: ChainTracedEntry, repos: ChainRepo[]): string | null {
+  const repo = repos
+    .filter((candidate) => pathIsWithin(entry.final_target, candidate.path))
+    .sort((a, b) => normalizedPath(b.path).length - normalizedPath(a.path).length)[0];
+  return repo ? repoNodeId(repo.path) : null;
+}
+
 export function ChainOverview() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { topo, instr, loading, error, reload } = useChain();
   const [selected, setSelected] = useState<string | null>(null);
   const [wires, setWires] = useState<WirePath[]>([]);
@@ -92,7 +123,7 @@ export function ChainOverview() {
           : { text: t("chain.noRefs"), tone: "dim" }
       );
       nodes.push({
-        id: `repo:${repo.name}`,
+        id: repoNodeId(repo.path),
         col: 1,
         title: repo.name,
         sub: t("chain.skillsCount", { count: repo.skills.length }),
@@ -103,6 +134,7 @@ export function ChainOverview() {
     }
 
     for (const project of topo.projects) {
+      const aggregateId = aggregateNodeId(project.path);
       if (project.agents_dir) {
         const counts = countByStatus(project.agents_dir.entries);
         const badges: Node["badges"] = [...counts.entries()].map(([status, count]) => ({
@@ -111,7 +143,7 @@ export function ChainOverview() {
         }));
         const tone: ChainTone = counts.has("broken") ? "err" : counts.has("link_repo") ? "ok" : "dim";
         nodes.push({
-          id: `agg:${project.name}`,
+          id: aggregateId,
           col: 2,
           title: project.name,
           sub: t("chain.entriesCount", { count: project.agents_dir.entries.length }),
@@ -121,16 +153,18 @@ export function ChainOverview() {
         });
         const byRepo = new Map<string, number>();
         for (const e of project.agents_dir.entries) {
-          if (e.status === "link_repo" && e.repo) byRepo.set(e.repo, (byRepo.get(e.repo) ?? 0) + 1);
+          if (e.status !== "link_repo") continue;
+          const repoId = entryRepoNodeId(e, topo.repos);
+          if (repoId) byRepo.set(repoId, (byRepo.get(repoId) ?? 0) + 1);
         }
-        for (const [repo, count] of byRepo) {
-          edges.push({ from: `repo:${repo}`, to: `agg:${project.name}`, tone: "ok", label: `×${count}` });
+        for (const [repoId, count] of byRepo) {
+          edges.push({ from: repoId, to: aggregateId, tone: "ok", label: `×${count}` });
         }
       }
 
       for (const surface of project.surfaces) {
         if (surface.kind === "absent") continue;
-        const id = `surf:${project.name}:${surface.agent}`;
+        const id = surfaceNodeId(project.path, surface.agent);
         if (surface.kind === "dir_link") {
           const tone: ChainTone = surface.dir_link_ok ? "ok" : "err";
           nodes.push({
@@ -145,7 +179,12 @@ export function ChainOverview() {
             entries: [],
           });
           if (project.agents_dir) {
-            edges.push({ from: `agg:${project.name}`, to: id, tone, label: t("chain.dirLinkOk") });
+            edges.push({
+              from: aggregateId,
+              to: id,
+              tone,
+              label: t(surface.dir_link_ok ? "chain.dirLinkOk" : "chain.dirLinkBad"),
+            });
           }
           continue;
         }
@@ -172,15 +211,17 @@ export function ChainOverview() {
         const directByRepo = new Map<string, number>();
         let viaAgents = 0;
         for (const e of surface.entries) {
-          if (e.status === "direct" && e.repo)
-            directByRepo.set(e.repo, (directByRepo.get(e.repo) ?? 0) + 1);
+          if (e.status === "direct") {
+            const repoId = entryRepoNodeId(e, topo.repos);
+            if (repoId) directByRepo.set(repoId, (directByRepo.get(repoId) ?? 0) + 1);
+          }
           if (e.status === "via_agents") viaAgents += 1;
         }
-        for (const [repo, count] of directByRepo) {
-          edges.push({ from: `repo:${repo}`, to: id, tone: "warn", label: `×${count}` });
+        for (const [repoId, count] of directByRepo) {
+          edges.push({ from: repoId, to: id, tone: "warn", label: `×${count}` });
         }
         if (viaAgents > 0 && project.agents_dir) {
-          edges.push({ from: `agg:${project.name}`, to: id, tone: "ok", label: `×${viaAgents}` });
+          edges.push({ from: aggregateId, to: id, tone: "ok", label: `×${viaAgents}` });
         }
       }
     }
@@ -220,10 +261,10 @@ export function ChainOverview() {
       if (!a || !b) return;
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
-      const x1 = ra.right - crect.left + container.scrollLeft;
-      const y1 = ra.top + ra.height / 2 - crect.top + container.scrollTop;
-      const x2 = rb.left - crect.left + container.scrollLeft;
-      const y2 = rb.top + rb.height / 2 - crect.top + container.scrollTop;
+      const x1 = ra.right - crect.left;
+      const y1 = ra.top + ra.height / 2 - crect.top;
+      const x2 = rb.left - crect.left;
+      const y2 = rb.top + rb.height / 2 - crect.top;
       const mx = (x1 + x2) / 2;
       next.push({
         key: `${edge.from}->${edge.to}:${i}`,
@@ -249,6 +290,10 @@ export function ChainOverview() {
 
   const guardAllOk = topo?.guard.every((g) => g.state !== "violation") ?? true;
   const GuardIcon = guardAllOk ? ShieldCheck : ShieldAlert;
+  const selectedProject = searchParams.get("project");
+  const workbenchTarget = selectedProject
+    ? `/?project=${encodeURIComponent(selectedProject)}`
+    : "/";
 
   const renderColumn = (col: 1 | 2 | 3, heading: string) => (
     <div className="min-w-[280px] flex-1">
@@ -262,6 +307,7 @@ export function ChainOverview() {
             return (
               <div
                 key={node.id}
+                data-node-id={node.id}
                 ref={(el) => {
                   if (el) nodeRefs.current.set(node.id, el);
                   else nodeRefs.current.delete(node.id);
@@ -363,7 +409,7 @@ export function ChainOverview() {
               return (
                 <button
                   key={agent}
-                  onClick={() => navigate("/")}
+                  onClick={() => navigate(workbenchTarget)}
                   title={t("instructions.costBarHint")}
                   className={cn(
                     "font-mono text-[11.5px] outline-none transition-colors hover:text-secondary",
@@ -420,33 +466,44 @@ export function ChainOverview() {
 
       {topo && (
         <>
-          <div ref={containerRef} className="relative overflow-x-auto">
-            <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full">
-              {wires.map((w) => {
-                const hot = connected ? connected.has(w.from) && connected.has(w.to) : false;
-                const cold = connected ? !hot : false;
-                return (
-                  <g key={w.key}>
-                    <path
-                      d={w.d}
-                      fill="none"
-                      stroke={TONE_STROKE[w.tone]}
-                      strokeWidth={hot ? 2.5 : 1.5}
-                      opacity={cold ? 0.08 : hot ? 1 : 0.45}
-                    />
-                    {w.label && !cold && (
-                      <text x={w.lx} y={w.ly} textAnchor="middle" className="fill-current font-mono text-[10px] text-muted">
-                        {w.label}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
-            <div className="flex gap-14 pb-2">
-              {renderColumn(1, t("chain.tierRepos"))}
-              {renderColumn(2, t("chain.tierAgg"))}
-              {renderColumn(3, t("chain.tierSurfaces"))}
+          <div className="overflow-x-auto">
+            <div ref={containerRef} data-testid="chain-graph" className="relative min-w-max">
+              <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full">
+                {wires.map((w) => {
+                  const hot = connected ? connected.has(w.from) && connected.has(w.to) : false;
+                  const cold = connected ? !hot : false;
+                  return (
+                    <g
+                      key={w.key}
+                      data-edge-from={w.from}
+                      data-edge-to={w.to}
+                    >
+                      <path
+                        d={w.d}
+                        fill="none"
+                        stroke={TONE_STROKE[w.tone]}
+                        strokeWidth={hot ? 2.5 : 1.5}
+                        opacity={cold ? 0.08 : hot ? 1 : 0.45}
+                      />
+                      {w.label && !cold && (
+                        <text
+                          x={w.lx}
+                          y={w.ly}
+                          textAnchor="middle"
+                          className="fill-current font-mono text-[10px] text-muted"
+                        >
+                          {w.label}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
+              <div className="flex gap-14 pb-2">
+                {renderColumn(1, t("chain.tierRepos"))}
+                {renderColumn(2, t("chain.tierAgg"))}
+                {renderColumn(3, t("chain.tierSurfaces"))}
+              </div>
             </div>
           </div>
 

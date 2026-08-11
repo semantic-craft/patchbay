@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `patchbay-cli` keeps `chain`, `instructions`, `fleet`, and `tools`, gains `status` (data directory and database path), and drops `repo`, `skills`, `presets`, `git`, and the `--skills-root` flag.
 - `core::central_repo` is now `core::app_dirs` and resolves only application state (`~/.patchbay`); `git_credentials` keeps keychain-backed remote credentials without the GitHub App flow.
 - Removed the Liquid Glass CSS tokens and composition classes, native command and plugin, and transparent-window configuration without retaining a compatibility path.
-- Net −39k lines. Rust and frontend suites stay green (589 + 124 tests).
+- Net −39k lines. Rust and frontend suites stay green (589 + 126 tests).
 
 ## [1.32.1] - 2026-07-29
 
