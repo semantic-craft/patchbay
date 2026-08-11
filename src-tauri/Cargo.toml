@@ -1,6 +1,6 @@
 [package]
 name = "patchbay"
-version = "1.32.1"
+version = "2.0.0"
 description = "Patchbay - AI Agent Skills Control Plane"
 authors = ["tianliang"]
 license = "MIT"
