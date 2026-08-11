@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Release Overview
 - Patchbay is now only the three-tier chain tool. The central skill library and everything built on it — the marketplace with its leaderboards, the local/Git install paths, GitHub backup and multi-device sync, presets applied to global agent surfaces, and the per-agent workspaces — have been removed. Skills live in the user's own Git repositories; Patchbay wires them into a project and keeps global surfaces empty.
+- The desktop UI now uses a flat canvas with one clean island: the former wallpaper, translucency, blur, and Liquid Glass layers are gone in both light and dark mode.
 
 ### User-facing
 - **Vendor-managed agent entries no longer trip the global guard.** Codex installs its Chronicle screen-recording skill into `~/.codex/skills`; the guard now recognizes vendor-managed entries on their own agent's surface (same-named directories on other agents' surfaces still violate).
-- **One main screen.** The sidebar is the project list plus Fleet and Settings. Chain, Doctor, and Sources are sections of the main screen instead of separate destinations; navigation drops from nine entries to the project list plus two.
+- **One main screen.** The sidebar is the project list plus Fleet and Settings. Workbench, Chain, Doctor, and Sources sit in underlined tabs embedded in the island header; navigation drops from nine entries to the project list plus two sidebar utilities.
+- **Stable visual identifiers.** Project and Skill names derive a consistent accent color, while primary actions use soft fills and dialogs share the same island treatment.
 - **Removed: Library, Install, Backup, the agent and global workspaces, and the project detail page.** The tray menu is now Open Patchbay / Quit.
 - **Chain sources are Git checkouts only.** "Patchbay Central" is no longer a tier-1 source, and the central-library path setting is gone.
 
@@ -20,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleted the marketplace, installer, sync-engine, backup, auto-backup, scenario, agent-workspace, and preset modules along with their commands; the Tauri command surface drops from 163 to 80.
 - `patchbay-cli` keeps `chain`, `instructions`, `fleet`, and `tools`, gains `status` (data directory and database path), and drops `repo`, `skills`, `presets`, `git`, and the `--skills-root` flag.
 - `core::central_repo` is now `core::app_dirs` and resolves only application state (`~/.patchbay`); `git_credentials` keeps keychain-backed remote credentials without the GitHub App flow.
-- Net −39k lines. Rust and frontend suites stay green (619 + 114 tests).
+- Removed the Liquid Glass CSS tokens and composition classes, native command and plugin, and transparent-window configuration without retaining a compatibility path.
+- Net −39k lines. Rust and frontend suites stay green (589 + 124 tests).
 
 ## [1.32.1] - 2026-07-29
 
