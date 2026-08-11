@@ -167,17 +167,19 @@ pub(super) fn replace_symlink(
     link: &Path,
     expected_raw_target: &Path,
 ) -> std::io::Result<()> {
-    replace_symlink_with(target, link, expected_raw_target, make_symlink)
+    replace_symlink_with(target, link, expected_raw_target, make_symlink, || {})
 }
 
-fn replace_symlink_with<F>(
+fn replace_symlink_with<F, H>(
     target: &Path,
     link: &Path,
     expected_raw_target: &Path,
     create: F,
+    before_rename: H,
 ) -> std::io::Result<()>
 where
     F: FnOnce(&Path, &Path) -> std::io::Result<()>,
+    H: FnOnce(),
 {
     let meta = std::fs::symlink_metadata(link)?;
     if !meta.file_type().is_symlink() {
@@ -237,30 +239,31 @@ where
         ));
     }
 
+    before_rename();
     std::fs::rename(link, &backup)?;
-    if std::fs::read_link(&backup).ok().as_deref() != Some(expected_raw_target) {
+    let staged_target = std::fs::read_link(&backup);
+    if staged_target.as_deref().ok() != Some(expected_raw_target) {
         let _ = remove_symlink(&prepared);
+        let restore = match staged_target {
+            Ok(actual_target) => restore_backup_if_vacant(&backup, link, &actual_target),
+            Err(error) => Err(error),
+        };
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!(
-                "staged link did not match planned evidence; changed node preserved at {}",
-                backup.display()
-            ),
+            match restore {
+                Ok(()) => "staged link did not match planned evidence; changed node restored at public path"
+                    .to_string(),
+                Err(restore_error) => format!(
+                    "staged link did not match planned evidence; changed node preserved at {}; restore failed: {restore_error}",
+                    backup.display()
+                ),
+            },
         ));
     }
 
     let prepared_target = std::fs::read_link(&prepared)?;
     if let Err(install_error) = install_prepared_no_replace(&prepared, link, target) {
-        let restore = if std::fs::symlink_metadata(link)
-            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-        {
-            restore_backup_no_replace(&backup, link, expected_raw_target)
-        } else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                "public path was concurrently occupied",
-            ))
-        };
+        let restore = restore_backup_if_vacant(&backup, link, expected_raw_target);
         return Err(std::io::Error::new(
             install_error.kind(),
             match restore {
@@ -293,6 +296,19 @@ where
             ),
         )
     })
+}
+
+fn restore_backup_if_vacant(backup: &Path, link: &Path, raw_target: &Path) -> std::io::Result<()> {
+    match std::fs::symlink_metadata(link) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            restore_backup_no_replace(backup, link, raw_target)
+        }
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "public path was concurrently occupied",
+        )),
+        Err(error) => Err(error),
+    }
 }
 
 #[cfg(windows)]
@@ -572,7 +588,7 @@ enum SurfaceVerdict {
     Conflict(String),
     /// Absent surface: create the `.claude/skills -> ../.agents/skills` dir link.
     CreateDirLink,
-    /// Correct lexical target, but the native filesystem cannot traverse it.
+    /// Correct lexical target, but stored in a non-native Windows link shape.
     RepairDirLink,
     /// Physical surface: fan out into per-skill entry links.
     PerEntry,
@@ -581,18 +597,23 @@ enum SurfaceVerdict {
 fn decide_surface(surface: &Path, agg: &Path, ev: &EntryEvidence) -> SurfaceVerdict {
     match ev {
         EntryEvidence::Symlink(_) => {
-            if link_target_matches(surface, agg)
-                && link_tracer::native_target_shape_ok(surface)
-                && surface_traversable(surface)
-            {
-                SurfaceVerdict::Exists
-            } else if link_target_matches(surface, agg) {
-                SurfaceVerdict::RepairDirLink
-            } else {
-                SurfaceVerdict::Conflict(
+            if !link_target_matches(surface, agg) {
+                return SurfaceVerdict::Conflict(
                     "surface is a symlink but does not resolve to .agents/skills".to_string(),
-                )
+                );
             }
+
+            if !link_tracer::native_target_shape_ok(surface) {
+                return SurfaceVerdict::RepairDirLink;
+            }
+
+            if !surface_traversable(surface) {
+                return SurfaceVerdict::Conflict(
+                    "surface resolves to .agents/skills but cannot be traversed".to_string(),
+                );
+            }
+
+            SurfaceVerdict::Exists
         }
         EntryEvidence::File => SurfaceVerdict::Conflict("surface exists but is a file".to_string()),
         EntryEvidence::Absent => SurfaceVerdict::CreateDirLink,
@@ -1575,7 +1596,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn preview_repairs_a_correctly_targeted_surface_that_cannot_be_traversed() {
+    fn preview_conflicts_when_correct_surface_target_cannot_be_traversed() {
         use std::os::unix::fs::PermissionsExt;
 
         let f = setup();
@@ -1600,7 +1621,12 @@ mod tests {
             &roots(&f),
         )
         .unwrap();
-        assert_eq!(plan.entries[0].action, "repaired");
+        assert_eq!(plan.entries[0].action, "conflict");
+        assert!(plan.entries[0]
+            .message
+            .as_deref()
+            .unwrap()
+            .contains("cannot be traversed"));
 
         std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(original_mode))
             .unwrap();
@@ -1608,7 +1634,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn unreadable_surface_is_relinked_then_the_second_run_is_idempotent() {
+    fn unreadable_surface_is_reported_as_conflict_without_relinking() {
         use std::os::unix::fs::PermissionsExt;
 
         let f = setup();
@@ -1617,6 +1643,7 @@ mod tests {
         std::fs::create_dir_all(f.project.join(".claude")).unwrap();
         let surface = f.project.join(".claude/skills");
         symlink(Path::new("../.agents/skills"), &surface).unwrap();
+        let original_link_target = std::fs::read_link(&surface).unwrap();
 
         let aggregate = f.project.join(".agents/skills");
         let original_mode = std::fs::metadata(&aggregate).unwrap().permissions().mode();
@@ -1628,9 +1655,20 @@ mod tests {
             &roots(&f),
         )
         .unwrap();
-        assert_eq!(plan.entries[0].action, "repaired");
+        assert_eq!(plan.entries[0].action, "conflict");
         let report = apply_link(&plan, &roots(&f)).unwrap();
-        assert_eq!(report.entries[0].action, "repaired");
+        assert_eq!(report.entries[0].action, "conflict");
+        assert_eq!(std::fs::read_link(&surface).unwrap(), original_link_target);
+        assert!(!f
+            .project
+            .join(".claude")
+            .read_dir()
+            .unwrap()
+            .any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".patchbay-relink-")));
 
         std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(original_mode))
             .unwrap();
@@ -1650,7 +1688,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn changed_surface_evidence_is_preserved_instead_of_repaired() {
+    fn changed_surface_evidence_is_skipped_from_a_conflict_plan() {
         use std::os::unix::fs::PermissionsExt;
 
         let f = setup();
@@ -1670,7 +1708,7 @@ mod tests {
             &roots(&f),
         )
         .unwrap();
-        assert_eq!(plan.entries[0].action, "repaired");
+        assert_eq!(plan.entries[0].action, "conflict");
 
         std::fs::set_permissions(&aggregate, std::fs::Permissions::from_mode(original_mode))
             .unwrap();
@@ -1694,12 +1732,18 @@ mod tests {
         symlink(&old_target, &link).unwrap();
         let expected = std::fs::read_link(&link).unwrap();
 
-        let error = replace_symlink_with(&f.project, &link, &expected, |_target, _link| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "injected create failure",
-            ))
-        })
+        let error = replace_symlink_with(
+            &f.project,
+            &link,
+            &expected,
+            |_target, _link| {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "injected create failure",
+                ))
+            },
+            || {},
+        )
         .unwrap_err();
 
         assert!(error.to_string().contains("original link unchanged"));
@@ -1720,13 +1764,19 @@ mod tests {
         symlink(&old_target, &link).unwrap();
         let expected = std::fs::read_link(&link).unwrap();
 
-        let error = replace_symlink_with(&f.project, &link, &expected, |_target, link| {
-            std::fs::create_dir(link)?;
-            Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "injected failure after junction directory creation",
-            ))
-        })
+        let error = replace_symlink_with(
+            &f.project,
+            &link,
+            &expected,
+            |_target, link| {
+                std::fs::create_dir(link)?;
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "injected failure after junction directory creation",
+                ))
+            },
+            || {},
+        )
         .unwrap_err();
 
         assert!(error.to_string().contains("original link unchanged"));
@@ -1753,13 +1803,19 @@ mod tests {
         symlink(&old_target, &link).unwrap();
         let expected = std::fs::read_link(&link).unwrap();
 
-        let error = replace_symlink_with(&new_target, &link, &expected, |target, prepared| {
-            symlink(target, prepared)?;
-            remove_symlink(&link)?;
-            std::fs::create_dir(&link)?;
-            std::fs::write(link.join("sentinel"), "concurrent data")?;
-            Ok(())
-        })
+        let error = replace_symlink_with(
+            &new_target,
+            &link,
+            &expected,
+            |target, prepared| {
+                symlink(target, prepared)?;
+                remove_symlink(&link)?;
+                std::fs::create_dir(&link)?;
+                std::fs::write(link.join("sentinel"), "concurrent data")?;
+                Ok(())
+            },
+            || {},
+        )
         .unwrap_err();
 
         assert!(error.to_string().contains("changed while replacement"));
@@ -1768,6 +1824,42 @@ mod tests {
             "concurrent data"
         );
         assert!(std::fs::symlink_metadata(&link).unwrap().is_dir());
+    }
+
+    #[test]
+    fn replacement_restores_link_changed_after_the_final_race_check() {
+        let f = setup();
+        let old_target = f.temp.path().join("old-final-race-target");
+        let concurrent_target = f.temp.path().join("concurrent-final-race-target");
+        let requested_target = f.temp.path().join("requested-final-race-target");
+        std::fs::create_dir_all(&old_target).unwrap();
+        std::fs::create_dir_all(&concurrent_target).unwrap();
+        std::fs::create_dir_all(&requested_target).unwrap();
+        let link = f.temp.path().join("final-race-surface");
+        symlink(&old_target, &link).unwrap();
+        let expected = std::fs::read_link(&link).unwrap();
+
+        let error = replace_symlink_with(
+            &requested_target,
+            &link,
+            &expected,
+            |target, prepared| symlink(target, prepared),
+            || {
+                remove_symlink(&link).unwrap();
+                symlink(&concurrent_target, &link).unwrap();
+            },
+        )
+        .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("staged link did not match planned evidence"));
+        assert_eq!(std::fs::read_link(&link).unwrap(), concurrent_target);
+        assert!(!f.temp.path().read_dir().unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".patchbay-relink-")));
     }
 
     #[cfg(windows)]
