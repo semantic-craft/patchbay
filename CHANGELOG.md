@@ -5,6 +5,17 @@ All notable changes to Patchbay since its first independent release are document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-08-11
+
+### Release Overview
+- Restores the Island UI's intended light appearance as the first-launch default.
+
+### User-facing
+- **New profiles now open with the light theme.** Patchbay starts with its light gray canvas and white content islands when no theme preference has been saved; explicit light, dark, and system choices remain unchanged.
+
+### Developer & Governance
+- Added a regression test for the no-preference theme contract so future visual redesigns cannot silently restore the former dark fallback.
+
 ## [2.0.1] - 2026-08-11
 
 ### Release Overview
